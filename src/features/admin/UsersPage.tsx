@@ -45,6 +45,11 @@ export default function UsersPage() {
   const [roleForm] = Form.useForm();
   const [targetUser, setTargetUser] = useState<UserRow | null>(null);
 
+  // reset password modal
+  const [openResetPass, setOpenResetPass] = useState(false);
+  const [savingResetPass, setSavingResetPass] = useState(false);
+  const [resetPassForm] = Form.useForm();
+
   async function loadUsers(page = 1, limit = 20) {
     try {
       setLoading(true);
@@ -143,6 +148,31 @@ export default function UsersPage() {
     }
   };
 
+  // ---------- Reset Password ----------
+  const onOpenResetPass = (u: UserRow) => {
+    setTargetUser(u);
+    resetPassForm.resetFields();
+    setOpenResetPass(true);
+  };
+
+  const submitResetPass = async () => {
+    const v = await resetPassForm.validateFields();
+    setSavingResetPass(true);
+    try {
+      // หมายเหตุ: อาจจะต้องปรับ URL หรือรูปแบบ parameter (เช่น password หรือ new_password) ตาม API ของ Backend
+      await api.put(`/admin/users/${targetUser?.id}/reset-password`, {
+        password: v.new_password,
+      });
+
+      message.success("รีเซ็ตรหัสผ่านสำเร็จ", 2);
+      setOpenResetPass(false);
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || "รีเซ็ตรหัสผ่านไม่สำเร็จ");
+    } finally {
+      setSavingResetPass(false);
+    }
+  };
+
   return (
     <div className="p-4">
       <Card
@@ -203,6 +233,9 @@ export default function UsersPage() {
                   <Button size="small" onClick={() => onOpenRoleModal(u)}>
                     กำหนด Role
                   </Button>
+                  <Button size="small" danger onClick={() => onOpenResetPass(u)}>
+                    รีเซ็ตรหัสผ่าน
+                  </Button>
                 </Space>
               ),
             },
@@ -257,7 +290,7 @@ export default function UsersPage() {
             label="รหัสผ่าน"
             rules={[{ required: true, min: 6 }]}
           >
-            <Input.Password />
+            <Input.Password autoComplete="new-password" />
           </Form.Item>
 
           <Form.Item name="display_name" label="Display Name (ถ้ามี)">
@@ -297,6 +330,31 @@ export default function UsersPage() {
                 label: `${r.code} - ${r.name}`,
               }))}
             />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* ---------- Reset Password Modal ---------- */}
+      <Modal
+        title={`รีเซ็ตรหัสผ่าน: ${targetUser?.email || ""}`}
+        open={openResetPass}
+        onCancel={() => setOpenResetPass(false)}
+        onOk={submitResetPass}
+        okText="บันทึกรหัสผ่านใหม่"
+        centered
+        confirmLoading={savingResetPass}
+        width={400}
+      >
+        <Form layout="vertical" form={resetPassForm}>
+          <Form.Item
+            name="new_password"
+            label="รหัสผ่านใหม่"
+            rules={[
+              { required: true, message: "กรุณาระบุรหัสผ่านใหม่" },
+              { min: 6, message: "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร" },
+            ]}
+          >
+            <Input.Password placeholder="ระบุรหัสผ่านใหม่" autoComplete="new-password" />
           </Form.Item>
         </Form>
       </Modal>
