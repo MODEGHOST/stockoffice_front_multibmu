@@ -1,7 +1,7 @@
-// src/components/Navbar.tsx
 import { useEffect, useState } from "react";
-import { Menu, Button, Space } from "antd";
+import { Menu, Button, Space, Avatar, Dropdown, Drawer } from "antd";
 import { useNavigate } from "react-router-dom";
+import { UserOutlined, MenuOutlined, LogoutOutlined } from "@ant-design/icons";
 import { getMeCache, hasPermission, me, logout, subscribeAuth } from "../features/auth/authStore";
 import CompanySwitcher from "./CompanySwitcher";
 import PwaInstallPrompt from "./PwaInstallPrompt";
@@ -9,6 +9,7 @@ import PwaInstallPrompt from "./PwaInstallPrompt";
 export default function Navbar() {
   const nav = useNavigate();
   const [, force] = useState(0);
+  const [drawerVisible, setDrawerVisible] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("accessToken");
@@ -18,7 +19,6 @@ export default function Navbar() {
   }, []);
 
   const user = getMeCache()?.user;
-
 
   // ✅ ถ้ายังไม่มี permission purchase.bill.manage ให้ fallback ใช้ purchase.po.manage ชั่วคราว
   const canBill =
@@ -71,29 +71,86 @@ export default function Navbar() {
     { key: "/finance", label: "การเงิน" },
   ].filter(Boolean) as any[];
 
+  const userMenu = [
+    {
+      key: "email",
+      label: <span className="text-gray-500">{user?.email || "User Profile"}</span>,
+      disabled: true,
+    },
+    { type: "divider" },
+    {
+      key: "logout",
+      label: "Logout",
+      icon: <LogoutOutlined />,
+      danger: true,
+      onClick: () => {
+        logout();
+        nav("/login", { replace: true });
+      },
+    },
+  ];
+
   return (
     <div className="w-full flex items-center justify-between">
-      <Menu
-        mode="horizontal"
-        selectedKeys={[window.location.pathname]}
-        items={items}
-        onClick={(e) => nav(e.key)}
-        className="flex-1"
-      />
+      {/* Mobile Hamburger Button */}
+      <div className="lg:hidden flex-none mr-4">
+        <Button 
+          type="text" 
+          icon={<MenuOutlined className="text-lg" />} 
+          onClick={() => setDrawerVisible(true)} 
+        />
+      </div>
 
-      <Space>
-        <PwaInstallPrompt />
+      {/* Desktop Menu */}
+      <div className="hidden lg:block flex-1 overflow-hidden">
+        <Menu
+          mode="horizontal"
+          selectedKeys={[window.location.pathname]}
+          items={items}
+          onClick={(e) => nav(e.key)}
+          className="border-b-0 w-full"
+        />
+      </div>
+
+      {/* Right Side UI */}
+      <Space className="flex-none gap-4">
+        <div className="hidden sm:block">
+          <PwaInstallPrompt />
+        </div>
         {getMeCache()?.roles?.includes("system_owner") && <CompanySwitcher />}
-        <span className="text-sm text-gray-600">{user?.email}</span>
-        <Button
-          onClick={() => {
-            logout();
-            nav("/login", { replace: true });
-          }}
-        >
-          Logout
-        </Button>
+        <Dropdown menu={{ items: userMenu as any }} placement="bottomRight" trigger={['click']}>
+          <div className="cursor-pointer hover:bg-gray-100 p-1 pr-2 rounded-full transition-colors flex items-center gap-2 border border-transparent hover:border-gray-200">
+            <Avatar icon={<UserOutlined />} className="bg-blue-600 flex-shrink-0" />
+            <span className="hidden sm:block text-sm font-medium text-gray-700 min-w-[50px]">
+              {user?.first_name || user?.email?.split('@')[0] || "Profile"}
+            </span>
+          </div>
+        </Dropdown>
       </Space>
+
+      {/* Mobile Drawer */}
+      <Drawer
+        title="เมนูระบบ"
+        placement="left"
+        onClose={() => setDrawerVisible(false)}
+        open={drawerVisible}
+        width={280}
+        styles={{ body: { padding: 0 } }}
+      >
+        <div className="p-4 border-b">
+          <PwaInstallPrompt />
+        </div>
+        <Menu
+          mode="inline"
+          selectedKeys={[window.location.pathname]}
+          items={items}
+          onClick={(e) => {
+            setDrawerVisible(false);
+            nav(e.key);
+          }}
+          className="border-r-0"
+        />
+      </Drawer>
     </div>
   );
 }

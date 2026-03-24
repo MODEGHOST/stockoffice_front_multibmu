@@ -51,13 +51,14 @@ export default function BillListPage() {
         title: "เลขที่ Bill",
         dataIndex: "bill_no",
         key: "bill_no",
+        width: 180,
         render: (v, r) => (
           <Button type="link" onClick={() => nav(`/purchase/bill/${r.id}`)} style={{ padding: 0 }}>
             {v}
           </Button>
         ),
       },
-      { title: "ใบกำกับภาษี", dataIndex: "tax_invoice_no", key: "tax_invoice_no" },
+      { title: "ใบกำกับภาษี", dataIndex: "tax_invoice_no", key: "tax_invoice_no", width: 180 },
       {
         title: "วันที่",
         dataIndex: "issue_date",
