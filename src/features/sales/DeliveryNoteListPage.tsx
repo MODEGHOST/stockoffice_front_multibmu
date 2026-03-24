@@ -144,7 +144,8 @@ export default function DeliveryNoteListPage() {
           loading={loading}
           columns={columns}
           dataSource={rows}
-           onChange={onTableChange}
+          onChange={onTableChange}
+          scroll={{ x: 'max-content' }}
           pagination={{
             current: page,
             pageSize,

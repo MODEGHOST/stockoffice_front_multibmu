@@ -167,6 +167,7 @@ export default function GrnListPage() {
           columns={columns}
           dataSource={rows}
           onChange={onTableChange}
+          scroll={{ x: 'max-content' }}
           pagination={{
             current: page,
             pageSize,

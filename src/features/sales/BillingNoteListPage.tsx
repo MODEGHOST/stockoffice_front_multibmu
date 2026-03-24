@@ -161,6 +161,7 @@ export default function BillingNoteListPage() {
           loading={loading}
           columns={columns}
           dataSource={rows}
+          scroll={{ x: 'max-content' }}
           pagination={{
             current: page,
             pageSize: limit,

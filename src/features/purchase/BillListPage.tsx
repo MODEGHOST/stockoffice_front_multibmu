@@ -175,6 +175,7 @@ export default function BillListPage() {
           columns={columns}
           dataSource={rows}
           onChange={onTableChange}
+          scroll={{ x: 'max-content' }}
           pagination={{
             current: page,
             pageSize,
