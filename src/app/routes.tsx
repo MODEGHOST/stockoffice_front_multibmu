@@ -1,57 +1,77 @@
 import { createBrowserRouter } from "react-router-dom";
+import { Suspense, lazy } from "react";
+import { Spin } from "antd";
+
 import RequireAuth from "../lib/guard";
 import AppLayout from "../components/AppLayout";
 
-import LoginPage from "../features/auth/LoginPage";
-import DashboardPage from "../features/dashboard/DashboardPage";
+// Helper to wrap lazy components in Suspense
+const Loadable = (Component: React.LazyExoticComponent<any>) => (props: any) => (
+  <Suspense
+    fallback={
+      <div className="flex items-center justify-center p-10 min-h-[50vh]">
+        <Spin size="large" />
+      </div>
+    }
+  >
+    <Component {...props} />
+  </Suspense>
+);
 
-import ProductListPage from "../features/products/ProductListPage";
-import WarehouseListPage from "../features/warehouses/WarehouseListPage";
-import WarehouseDetailPage from "../features/warehouses/WarehouseDetailPage";
-import CompanyStockPage from "../features/warehouses/CompanyStockPage"; 
+const LoginPage = Loadable(lazy(() => import("../features/auth/LoginPage")));
+const DashboardPage = Loadable(lazy(() => import("../features/dashboard/DashboardPage")));
 
-import VendorListPage from "../features/vendors/VendorListPage";
+const ProductListPage = Loadable(lazy(() => import("../features/products/ProductListPage")));
+const WarehouseListPage = Loadable(lazy(() => import("../features/warehouses/WarehouseListPage")));
+const WarehouseDetailPage = Loadable(lazy(() => import("../features/warehouses/WarehouseDetailPage")));
+const CompanyStockPage = Loadable(lazy(() => import("../features/warehouses/CompanyStockPage")));
 
-import GrnListPage from "../features/purchase/GrnListPage";
-import GrnCreatePage from "../features/purchase/GrnCreatePage";
-import GrnDetailPage from "../features/purchase/GrnDetailPage";
+const VendorListPage = Loadable(lazy(() => import("../features/vendors/VendorListPage")));
 
-import PoListPage from "../features/purchase/PoListPage";
-import PoCreatePage from "../features/purchase/PoCreatePage";
-import PoDetailPage from "../features/purchase/PoDetailPage";
+const GrnListPage = Loadable(lazy(() => import("../features/purchase/GrnListPage")));
+const GrnCreatePage = Loadable(lazy(() => import("../features/purchase/GrnCreatePage")));
+const GrnDetailPage = Loadable(lazy(() => import("../features/purchase/GrnDetailPage")));
 
-import BillListPage from "../features/purchase/BillListPage";
-import BillCreatePage from "../features/purchase/BillCreatePage";
-import BillDetailPage from "../features/purchase/BillDetailPage";
+const PoListPage = Loadable(lazy(() => import("../features/purchase/PoListPage")));
+const PoCreatePage = Loadable(lazy(() => import("../features/purchase/PoCreatePage")));
+const PoDetailPage = Loadable(lazy(() => import("../features/purchase/PoDetailPage")));
 
-import InvoiceListPage from "../features/sales/InvoiceListPage";
-import InvoiceCreatePage from "../features/sales/InvoiceCreatePage";
-import InvoiceDetailPage from "../features/sales/InvoiceDetailPage";
-import QuotationListPage from "../features/sales/QuotationListPage";
-import DeliveryNoteListPage from "../features/sales/DeliveryNoteListPage";
-import ReceiptListPage from "../features/sales/ReceiptListPage";
-import BillingNoteListPage from "../features/sales/BillingNoteListPage";
-import BillingNoteCreatePage from "../features/sales/BillingNoteCreatePage";
-import BillingNoteDetailPage from "../features/sales/BillingNoteDetailPage";
+const BillListPage = Loadable(lazy(() => import("../features/purchase/BillListPage")));
+const BillCreatePage = Loadable(lazy(() => import("../features/purchase/BillCreatePage")));
+const BillDetailPage = Loadable(lazy(() => import("../features/purchase/BillDetailPage")));
 
-import UsersPage from "../features/admin/UsersPage";
-import SettingsPage from "../features/admin/SettingsPage";
-import CommissionPaymentPage from "../features/admin/CommissionPaymentPage";
+const InvoiceListPage = Loadable(lazy(() => import("../features/sales/InvoiceListPage")));
+const InvoiceCreatePage = Loadable(lazy(() => import("../features/sales/InvoiceCreatePage")));
+const InvoiceDetailPage = Loadable(lazy(() => import("../features/sales/InvoiceDetailPage")));
+const QuotationListPage = Loadable(lazy(() => import("../features/sales/QuotationListPage")));
+const DeliveryNoteListPage = Loadable(lazy(() => import("../features/sales/DeliveryNoteListPage")));
+const ReceiptListPage = Loadable(lazy(() => import("../features/sales/ReceiptListPage")));
+const BillingNoteListPage = Loadable(lazy(() => import("../features/sales/BillingNoteListPage")));
+const BillingNoteCreatePage = Loadable(lazy(() => import("../features/sales/BillingNoteCreatePage")));
+const BillingNoteDetailPage = Loadable(lazy(() => import("../features/sales/BillingNoteDetailPage")));
 
-import AdjustmentListPage from "../features/stock/AdjustmentListPage";
-import AdjustmentCreatePage from "../features/stock/AdjustmentCreatePage";
-import AdjustmentDetailPage from "../features/stock/AdjustmentDetailPage";
+const UsersPage = Loadable(lazy(() => import("../features/admin/UsersPage")));
+const SettingsPage = Loadable(lazy(() => import("../features/admin/SettingsPage")));
+const CommissionPaymentPage = Loadable(lazy(() => import("../features/admin/CommissionPaymentPage")));
+const CPCreatePage = Loadable(lazy(() => import("../features/admin/CPCreatePage")));
+const CompanyManagePage = Loadable(lazy(() => import("../features/admin/CompanyManagePage")));
+const RolesPage = Loadable(lazy(() => import("../features/admin/RolesPage")));
+const AuditLogsPage = Loadable(lazy(() => import("../features/admin/AuditLogsPage")));
 
-import TransferListPage from "../features/stock/TransferListPage";
-import TransferCreatePage from "../features/stock/TransferCreatePage";
-import TransferDetailPage from "../features/stock/TransferDetailPage";
+const AdjustmentListPage = Loadable(lazy(() => import("../features/stock/AdjustmentListPage")));
+const AdjustmentCreatePage = Loadable(lazy(() => import("../features/stock/AdjustmentCreatePage")));
+const AdjustmentDetailPage = Loadable(lazy(() => import("../features/stock/AdjustmentDetailPage")));
 
-import CountListPage from "../features/stock/CountListPage";
-import CountCreatePage from "../features/stock/CountCreatePage";
-import CountDetailPage from "../features/stock/CountDetailPage";
+const TransferListPage = Loadable(lazy(() => import("../features/stock/TransferListPage")));
+const TransferCreatePage = Loadable(lazy(() => import("../features/stock/TransferCreatePage")));
+const TransferDetailPage = Loadable(lazy(() => import("../features/stock/TransferDetailPage")));
 
-import ReportsDashboard from "../features/reports/ReportsDashboard";
-import FinanceAccountsPage from "../features/finance/FinanceAccountsPage";
+const CountListPage = Loadable(lazy(() => import("../features/stock/CountListPage")));
+const CountCreatePage = Loadable(lazy(() => import("../features/stock/CountCreatePage")));
+const CountDetailPage = Loadable(lazy(() => import("../features/stock/CountDetailPage")));
+
+const ReportsDashboard = Loadable(lazy(() => import("../features/reports/ReportsDashboard")));
+const FinanceAccountsPage = Loadable(lazy(() => import("../features/finance/FinanceAccountsPage")));
 
 export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
@@ -99,8 +119,12 @@ export const router = createBrowserRouter([
 
 
           { path: "admin/users", element: <UsersPage /> },
+          { path: "admin/roles", element: <RolesPage /> },
           { path: "admin/settings", element: <SettingsPage /> },
+          { path: "admin/companies", element: <CompanyManagePage /> },
           { path: "admin/commissions", element: <CommissionPaymentPage /> },
+          { path: "admin/commissions/new", element: <CPCreatePage /> },
+          { path: "admin/logs", element: <AuditLogsPage /> },
 
           { path: "stock/adjustments", element: <AdjustmentListPage /> },
           { path: "stock/adjustments/new", element: <AdjustmentCreatePage /> },

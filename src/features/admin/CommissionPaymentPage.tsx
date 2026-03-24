@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
-import { Table, DatePicker, Button, Card, Space, message, Modal, Select } from "antd";
-import { WalletOutlined, FileTextOutlined } from "@ant-design/icons";
+import { useQuery } from "@tanstack/react-query";
+import { Table, DatePicker, Button, Card, Space, message } from "antd";
+import { WalletOutlined, FileTextOutlined, ArrowUpOutlined, ArrowDownOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import api from "../../lib/api";
+import { CPPrint } from "./CPPrint";
 
 const { RangePicker } = DatePicker;
 
@@ -21,6 +23,7 @@ type PaymentHistoryRow = {
   period_start: string;
   period_end: string;
   total_amount: number;
+  original_total: number;
   paid_date: string;
   finance_account_name: string;
   invoice_count: number;
@@ -32,70 +35,75 @@ export default function CommissionPaymentPage() {
     dayjs().endOf("month"),
   ]);
 
-  const [unpaidList, setUnpaidList] = useState<UnpaidCommissionRow[]>([]);
   const [expandedRowKeys, setExpandedRowKeys] = useState<number[]>([]);
   const [invoiceDetails, setInvoiceDetails] = useState<Record<number, any[]>>({});
   const [loadingDetails, setLoadingDetails] = useState<Record<number, boolean>>({});
-  const [historyList, setHistoryList] = useState<PaymentHistoryRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
+  
+  const [expandedHistoryRowKeys, setExpandedHistoryRowKeys] = useState<number[]>([]);
+  const [historyDetails, setHistoryDetails] = useState<Record<number, any[]>>({});
+  const [loadingHistoryDetails, setLoadingHistoryDetails] = useState<Record<number, boolean>>({});
 
   // Partial Payment State
   const [selectedInvoiceKeys, setSelectedInvoiceKeys] = useState<Record<number, React.Key[]>>({});
 
-  const [financeAccounts, setFinanceAccounts] = useState<any[]>([]);
-  
-  // Pay Modal State
-  const [payModalVisible, setPayModalVisible] = useState(false);
-  const [selectedSeller, setSelectedSeller] = useState<UnpaidCommissionRow | null>(null);
-  const [payMode, setPayMode] = useState<"ALL" | "PARTIAL">("ALL"); 
-  const [partialInvoices, setPartialInvoices] = useState<any[]>([]);
-  const [payForm, setPayForm] = useState({
-    finance_account_id: undefined as number | undefined,
-    note: ""
+  const nav = useNavigate();
+  const location = useLocation();
+
+  const fromDate = dateRange[0] ? dateRange[0].format("YYYY-MM-DD") : "";
+  const toDate = dateRange[1] ? dateRange[1].format("YYYY-MM-DD") : "";
+
+  // 1. Unpaid Summary Query
+  const { data: unpaidList = [], isLoading: loading, refetch: refetchUnpaid } = useQuery({
+    queryKey: ["unpaidCommissions", fromDate, toDate],
+    queryFn: async () => {
+      if (!fromDate || !toDate) return [];
+      const { data } = await api.get("/commissions/unpaid-summary", { params: { from: fromDate, to: toDate } });
+      return data.rows || [];
+    },
   });
-  const [paying, setPaying] = useState(false);
 
-  useEffect(() => {
-    fetchFinanceAccounts();
-    loadUnpaid();
-    loadHistory();
-  }, [dateRange]);
-
-  const fetchFinanceAccounts = async () => {
-    try {
-      const { data } = await api.get("/finance-accounts");
-      setFinanceAccounts(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const loadUnpaid = async () => {
-    if (!dateRange?.[0] || !dateRange?.[1]) return;
-    setLoading(true);
-    try {
-      const from = dateRange[0].format("YYYY-MM-DD");
-      const to = dateRange[1].format("YYYY-MM-DD");
-      const { data } = await api.get("/commissions/unpaid-summary", { params: { from, to } });
-      setUnpaidList(data.rows || []);
-      setSelectedInvoiceKeys({}); // Reset selections when date changes
-    } catch (error: any) {
-      message.error("Failed to load unpaid commissions");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadHistory = async () => {
-    setHistoryLoading(true);
-    try {
+  // 2. History Summary Query
+  const { data: historyList = [], isLoading: historyLoading, refetch: refetchHistory } = useQuery({
+    queryKey: ["commissionHistory"],
+    queryFn: async () => {
       const { data } = await api.get("/commissions/history", { params: { limit: 10 } });
-      setHistoryList(data.rows || []);
+      return data.rows || [];
+    },
+  });
+
+  // Reset selections when date changes
+  useEffect(() => {
+    setSelectedInvoiceKeys({});
+  }, [fromDate, toDate]);
+
+  // Refresh detection if navigated back
+  useEffect(() => {
+    if (location.state?.refresh) {
+      refetchUnpaid();
+      refetchHistory();
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state?.refresh, refetchUnpaid, refetchHistory]);
+
+  const loadHistoryItems = async (paymentId: number) => {
+    if (historyDetails[paymentId] || loadingHistoryDetails[paymentId]) return;
+    setLoadingHistoryDetails(prev => ({ ...prev, [paymentId]: true }));
+    try {
+      const { data } = await api.get(`/commissions/history/${paymentId}/items`);
+      setHistoryDetails(prev => ({ ...prev, [paymentId]: data.rows || [] }));
     } catch (error) {
-      console.error(error);
+      console.error("Failed to load history items", error);
     } finally {
-      setHistoryLoading(false);
+      setLoadingHistoryDetails(prev => ({ ...prev, [paymentId]: false }));
+    }
+  };
+
+  const handleHistoryExpand = (expanded: boolean, record: PaymentHistoryRow) => {
+    if (expanded) {
+      setExpandedHistoryRowKeys([record.id]);
+      loadHistoryItems(record.id);
+    } else {
+      setExpandedHistoryRowKeys([]);
     }
   };
 
@@ -125,75 +133,42 @@ export default function CommissionPaymentPage() {
     }
   };
 
-  const handleOpenPayModal = (record: UnpaidCommissionRow, mode: "ALL" | "PARTIAL" = "ALL") => {
-    setSelectedSeller(record);
-    setPayMode(mode);
-    setPayForm({ finance_account_id: undefined, note: `รอบชำระ ${dateRange[0].format("DD/MM/YYYY")} - ${dateRange[1].format("DD/MM/YYYY")}` });
+  const handleOpenPayModal = async (record: UnpaidCommissionRow, mode: "ALL" | "PARTIAL" = "ALL") => {
+    let itemsToPay: any[] = [];
     
     if (mode === "PARTIAL") {
       const selectedIds = selectedInvoiceKeys[record.seller_id] || [];
       const details = invoiceDetails[record.seller_id] || [];
-      const selectedData = details.filter(item => selectedIds.includes(item.sale_id));
-      setPartialInvoices(selectedData);
+      itemsToPay = details.filter(item => selectedIds.includes(item.sale_id)).map(item => ({...item, paid_amount: Number(item.commission_total), original_amount: Number(item.commission_total)}));
     } else {
-      setPartialInvoices([]);
-    }
-
-    setPayModalVisible(true);
-  };
-
-  const confirmPay = async () => {
-    if (!selectedSeller) return;
-    if (!payForm.finance_account_id) {
-      return message.warning("กรุณาเลือกช่องทางการเงินที่ใช้จ่าย");
-    }
-
-    setPaying(true);
-    try {
-      const from = dateRange[0].format("YYYY-MM-DD");
-      const to = dateRange[1].format("YYYY-MM-DD");
-      
-      const payload: any = {
-        seller_id: selectedSeller.seller_id,
-        finance_account_id: payForm.finance_account_id,
-        note: payForm.note,
-      };
-
-      if (payMode === "PARTIAL") {
-        payload.invoice_ids = selectedInvoiceKeys[selectedSeller.seller_id];
-        payload.amount = partialInvoices.reduce((sum, item) => sum + Number(item.commission_total), 0);
-      } else {
-        payload.from = from;
-        payload.to = to;
-        payload.amount = Number(selectedSeller.unpaid_commission_total);
+      let details = invoiceDetails[record.seller_id];
+      if (!details) {
+        setLoadingDetails(prev => ({ ...prev, [record.seller_id]: true }));
+        try {
+          const from = dateRange[0].format("YYYY-MM-DD");
+          const to = dateRange[1].format("YYYY-MM-DD");
+          const { data } = await api.get("/commissions/unpaid-invoices", { 
+            params: { seller_id: record.seller_id, from, to } 
+          });
+          details = data.rows || [];
+          setInvoiceDetails(prev => ({ ...prev, [record.seller_id]: details }));
+        } catch (error) {
+          console.error("Failed to load invoice details", error);
+          details = [];
+        } finally {
+          setLoadingDetails(prev => ({ ...prev, [record.seller_id]: false }));
+        }
       }
-
-      await api.post("/commissions/pay", payload);
-      message.success("บันทึกจ่ายค่าคอมมิชชั่นเรียบร้อยแล้ว");
-      setPayModalVisible(false);
-
-      // Clear selection after payment
-      if (payMode === "PARTIAL" && selectedSeller) {
-         setSelectedInvoiceKeys(prev => {
-            const newKeys = { ...prev };
-            delete newKeys[selectedSeller.seller_id];
-            return newKeys;
-         });
-         // Also clear detail cache to force reload if expanded again
-         setInvoiceDetails(prev => {
-            const newDetails = { ...prev };
-            delete newDetails[selectedSeller.seller_id];
-            return newDetails;
-         });
-      }
-
-      loadUnpaid();
-      loadHistory();
-    } catch (error: any) {
-      message.error(error.response?.data?.message || "Error paying commission");
-    } finally {
-      setPaying(false);
+      itemsToPay = (details || []).map((item: any) => ({ ...item, paid_amount: Number(item.commission_total), original_amount: Number(item.commission_total) }));
     }
+
+    nav("/admin/commissions/new", {
+      state: {
+         selectedSeller: record,
+         payingItems: itemsToPay,
+         dateRange: dateRange
+      }
+    });
   };
 
   const unpaidCols = [
@@ -321,6 +296,23 @@ export default function CommissionPaymentPage() {
     );
   };
 
+  const renderDifference = (original: number, paid: number) => {
+    const diff = Number(paid) - Number(original);
+    if (diff === 0) return null;
+    if (diff > 0) {
+      return (
+        <span className="text-green-600 font-semibold text-xs flex items-center justify-end gap-1">
+          <ArrowUpOutlined /> +฿{diff.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </span>
+      );
+    }
+    return (
+      <span className="text-red-500 font-semibold text-xs flex items-center justify-end gap-1">
+        <ArrowDownOutlined /> -฿{Math.abs(diff).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </span>
+    );
+  };
+
   const historyCols = [
     {
       title: "วันที่จ่าย",
@@ -343,17 +335,136 @@ export default function CommissionPaymentPage() {
       ),
     },
     {
+      title: "เลขที่เอกสาร",
+      dataIndex: "document_no",
+      render: (v: string) => <span className="font-medium text-gray-800">{v || "-"}</span>,
+    },
+    {
       title: "ช่องทางที่จ่าย",
       dataIndex: "finance_account_name",
       render: (v: string) => <span className="text-blue-600">{v}</span>,
     },
     {
-      title: "ยอดเงิน",
+      title: "ยอดเดิม",
+      dataIndex: "original_total",
+      align: "right" as const,
+      width: 120,
+      render: (v: number) => <span className="text-gray-500 line-through text-xs mr-2">฿{Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>,
+    },
+    {
+      title: "ส่วนต่าง",
+      key: "diff",
+      align: "right" as const,
+      width: 120,
+      render: (_: any, r: PaymentHistoryRow) => renderDifference(Number(r.original_total), Number(r.total_amount)),
+    },
+    {
+      title: "ยอดจ่ายจริง",
       dataIndex: "total_amount",
       align: "right" as const,
+      width: 150,
       render: (v: number) => <span className="font-semibold text-green-600">฿{Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>,
     },
   ];
+
+  const expandedHistoryRowRender = (record: PaymentHistoryRow) => {
+    const details = historyDetails[record.id] || [];
+    const isLoading = loadingHistoryDetails[record.id];
+
+    const detailCols = [
+      {
+        title: "วันที่ออกบิล",
+        dataIndex: "issue_date",
+        width: 150,
+        render: (v: string) => dayjs(v).format("DD/MM/YYYY"),
+      },
+      {
+        title: "เลขที่บิล",
+        dataIndex: "invoice_no",
+        width: 150,
+        render: (v: string, r: any) => (
+          <Link to={`/sales/invoice/${r.sale_id}`} target="_blank" className="font-medium text-blue-600 hover:underline">
+            {v}
+          </Link>
+        ),
+      },
+      {
+        title: "ยอดขายรวม",
+        dataIndex: "invoice_total",
+        align: "right" as const,
+        render: (v: number) => `฿${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      },
+      {
+        title: "ต้นทุน",
+        dataIndex: "cost_total",
+        align: "right" as const,
+        render: (v: number) => <span className="text-gray-500">฿{Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>,
+      },
+      {
+        title: "กำไร/ขาดทุน",
+        dataIndex: "profit_total",
+        align: "right" as const,
+        render: (v: number) => <span className="font-semibold text-blue-600">฿{Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>,
+      },
+      {
+        title: "สัดส่วนกำไร (%)",
+        key: "profit_percent",
+        align: "right" as const,
+        render: (_: any, r: any) => {
+          const invTotal = Number(r.invoice_total) || 0;
+          const profit = Number(r.profit_total) || 0;
+          if (invTotal <= 0) return <span className="text-gray-400">-</span>;
+          const percent = (profit / invTotal) * 100;
+          const colorClass = percent >= 0 ? "text-green-600" : "text-red-500";
+          return <span className={`font-semibold ${colorClass}`}>{percent > 0 ? "+" : ""}{percent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</span>;
+        },
+      },
+      {
+        title: "ค่าคอมเดิม",
+        dataIndex: "original_amount",
+        align: "right" as const,
+        render: (v: number) => <span className="text-gray-500">฿{Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>,
+      },
+      {
+        title: "ส่วนต่าง",
+        key: "diff",
+        align: "right" as const,
+        render: (_: any, r: any) => renderDifference(Number(r.original_amount), Number(r.paid_amount)),
+      },
+      {
+        title: "ค่าคอมที่จ่ายจริง",
+        dataIndex: "paid_amount",
+        align: "right" as const,
+        render: (v: number) => <span className="text-green-600 font-semibold">฿{Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>,
+      },
+    ];
+
+    return (
+      <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg m-2 shadow-inner">
+        <div className="flex justify-between items-center mb-3">
+          <h4 className="font-semibold text-gray-700 flex items-center gap-2 m-0">
+            <FileTextOutlined className="text-gray-500" />
+            รายละเอียดบิลที่จ่าย (บิลที่เลือกจ่ายทั้งหมด {details.length} รายการ)
+          </h4>
+          <div>
+            {!isLoading && details.length > 0 && (
+              <CPPrint record={record} details={details} />
+            )}
+          </div>
+        </div>
+        <Table 
+          columns={detailCols} 
+          dataSource={details} 
+          rowKey="id"
+          pagination={false} 
+          size="small"
+          loading={isLoading}
+          className="bg-white rounded-md overflow-hidden border border-gray-200"
+          rowClassName={(r) => Number(r.original_amount) !== Number(r.paid_amount) ? "bg-orange-50/80" : ""}
+        />
+      </div>
+    );
+  };
 
   return (
     <Space direction="vertical" className="w-full" size="large">
@@ -374,10 +485,16 @@ export default function CommissionPaymentPage() {
               if (val) setDateRange([val[0] as dayjs.Dayjs, val[1] as dayjs.Dayjs]);
             }}
             format="DD/MM/YYYY"
+            presets={[
+              { label: 'เดือนนี้', value: [dayjs().startOf('month'), dayjs().endOf('month')] },
+              { label: 'เดือนที่แล้ว', value: [dayjs().subtract(1, 'month').startOf('month'), dayjs().subtract(1, 'month').endOf('month')] },
+              { label: 'ปีนี้', value: [dayjs().startOf('year'), dayjs().endOf('year')] },
+            ]}
           />
         </div>
         
         <Table
+          scroll={{ x: 'max-content' }}
           rowKey="seller_id"
           columns={unpaidCols}
           dataSource={unpaidList}
@@ -394,84 +511,21 @@ export default function CommissionPaymentPage() {
 
       <Card className="rounded-xl shadow-sm border-gray-100" title={<div className="font-semibold text-gray-700 flex items-center gap-2"><FileTextOutlined /> ประวัติการจ่ายเงินล่าสุด (History)</div>}>
         <Table
+          scroll={{ x: 'max-content' }}
           rowKey="id"
           columns={historyCols}
           dataSource={historyList}
           loading={historyLoading}
           pagination={false}
           size="small"
+          rowClassName={(r) => Number(r.original_total) !== Number(r.total_amount) ? "bg-orange-50/50" : ""}
+          expandable={{
+            expandedRowRender: expandedHistoryRowRender,
+            expandedRowKeys: expandedHistoryRowKeys,
+            onExpand: handleHistoryExpand,
+          }}
         />
       </Card>
-
-      {/* Pay Modal */}
-      <Modal
-      centered
-        title={
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
-              <WalletOutlined />
-            </div>
-            ยืนยันการจ่ายค่าคอมมิชชั่น
-          </div>
-        }
-        open={payModalVisible}
-        onCancel={() => setPayModalVisible(false)}
-        onOk={confirmPay}
-        okText="ยืนยันจ่ายเงิน"
-        confirmLoading={paying}
-        okButtonProps={{ className: "bg-orange-600" }}
-        destroyOnClose
-      >
-        {selectedSeller && (
-          <div className="py-4 space-y-4">
-            <div className="bg-gray-50 p-4 rounded-lg flex justify-between items-center border border-gray-200">
-              <div>
-                <div className="text-xs text-gray-500 uppercase tracking-wider">จ่ายให้พนักงาน</div>
-                <div className="font-semibold text-gray-800">{selectedSeller.seller_name}</div>
-              </div>
-              <div className="text-right">
-                <div className="text-xs text-gray-500 uppercase tracking-wider">ยอดเงินสุทธิ</div>
-                <div className="font-bold text-2xl text-orange-600">
-                  ฿{payMode === "PARTIAL" 
-                    ? Number(partialInvoices.reduce((sum, item) => sum + Number(item.commission_total), 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    : Number(selectedSeller.unpaid_commission_total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                  }
-                </div>
-              </div>
-            </div>
-
-            <div className="text-sm text-gray-500 text-center mb-6">
-              รอบบิล: <span className="font-medium text-gray-800">{dateRange[0].format("DD/MM/YYYY")} ถึง {dateRange[1].format("DD/MM/YYYY")}</span> <br/>
-              {payMode === "PARTIAL" 
-                ? <span className="text-blue-600 font-medium">จ่ายเฉพาะบิลที่เลือกจำนวน {partialInvoices.length} บิล</span>
-                : <span>จำนวน {selectedSeller.inv_count} บิล (ทั้งหมดในรอบนี้)</span>
-              }
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                หักจากช่องทางการเงิน (Finance Account) <span className="text-red-500">*</span>
-              </label>
-              <Select
-                className="w-full"
-                placeholder="เลือกบัญชีที่ใช้จ่าย"
-                size="large"
-                value={payForm.finance_account_id}
-                onChange={(v) => setPayForm({ ...payForm, finance_account_id: v })}
-                options={financeAccounts.map((a) => ({
-                  value: a.id,
-                  label: (
-                    <div className="flex justify-between w-full pr-4">
-                      <span>{a.name}</span>
-                      <span className="text-gray-400">ยอดเงิน: ฿{Number(a.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                  )
-                }))}
-              />
-            </div>
-          </div>
-        )}
-      </Modal>
 
     </Space>
   );

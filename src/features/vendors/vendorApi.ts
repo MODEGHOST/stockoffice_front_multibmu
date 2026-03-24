@@ -203,9 +203,10 @@ export type VendorUpsert = {
   payment_term?: VendorPaymentTerm;
 };
 
-export async function listVendors(): Promise<VendorRow[]> {
-  const { data } = await api.get("/vendors");
-  return Array.isArray(data) ? data : [];
+export async function listVendors(params: Record<string, any> = {}): Promise<{ rows: VendorRow[], total: number }> {
+  const { data } = await api.get("/vendors", { params });
+  if (Array.isArray(data)) return { rows: data, total: data.length };
+  return { rows: data?.rows || [], total: data?.total || 0 };
 }
 
 export async function getVendor(id: number): Promise<VendorDetail> {

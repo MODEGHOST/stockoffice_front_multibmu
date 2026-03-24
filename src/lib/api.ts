@@ -22,9 +22,15 @@ async function doRefresh(): Promise<string> {
   const refreshToken = localStorage.getItem("refreshToken");
   if (!refreshToken) throw new Error("NO_REFRESH_TOKEN");
 
+  const switchCompanyId = localStorage.getItem("switchCompanyId");
+  const payload: any = { refreshToken };
+  if (switchCompanyId) {
+    payload.switchCompanyId = switchCompanyId;
+  }
+
   const r = await axios.post(
     `${baseURL}/auth/refresh`,
-    { refreshToken },
+    payload,
     { timeout: 15000 }
   );
 

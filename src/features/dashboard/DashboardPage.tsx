@@ -14,6 +14,7 @@ import {
   message,
   InputNumber,
 } from "antd";
+
 import {
   ReloadOutlined,
   SettingOutlined,
@@ -23,8 +24,15 @@ import {
   DollarOutlined,
   ContainerOutlined,
   CreditCardOutlined,
-
   DownloadOutlined,
+  LineChartOutlined,
+  FireOutlined,
+  StarOutlined,
+  PieChartOutlined,
+  AlertOutlined,
+  TeamOutlined,
+  StockOutlined,
+  ExclamationCircleOutlined,
 } from "@ant-design/icons";
 import dayjs, { Dayjs } from "dayjs";
 import ReactECharts from "echarts-for-react";
@@ -142,27 +150,33 @@ function KpiCardSimple({
   hint,
   icon,
   action,
+  titleColor = "text-gray-500",
+  valueColor = "text-gray-900",
+  iconColor = "text-gray-400"
 }: {
-  title: string;
+  title: React.ReactNode;
   value: any;
   hint?: string;
   icon: React.ReactNode;
   action?: React.ReactNode;
+  titleColor?: string;
+  valueColor?: string;
+  iconColor?: string;
 }) {
   return (
-    <Card className="rounded-xl" bodyStyle={{ padding: 16 }} style={{ minHeight: 120 }}>
+    <Card className="rounded-xl shadow-sm border-gray-100 hover:shadow-md transition-shadow duration-200" bodyStyle={{ padding: 16 }} style={{ minHeight: 120 }}>
       {/* Header Row: Title + Action */}
       <div className="flex items-start justify-between">
-        <div className="text-xs text-gray-500">{title}</div>
+        <div className={`text-sm font-semibold flex items-center gap-2 ${titleColor}`}>{title}</div>
         {action && <div>{action}</div>}
       </div>
 
-      <div className="flex items-end justify-between mt-1">
+      <div className="flex items-end justify-between mt-2">
         <div>
-          <div className="text-2xl font-semibold">{value}</div>
+          <div className={`text-3xl font-bold ${valueColor}`}>{value}</div>
           {hint ? <div className="text-xs text-gray-400 mt-1">{hint}</div> : null}
         </div>
-        <div className="text-gray-400 text-xl mb-1">{icon}</div>
+        <div className={`text-3xl opacity-80 mb-1 ${iconColor}`}>{icon}</div>
       </div>
     </Card>
   );
@@ -195,6 +209,7 @@ export default function DashboardPage() {
     stockQty: 0,
     lowStockCount: 0,
     salesTotal: 0,
+    profitTotal: 0,
     invoiceCount: 0,
     pendingDraftCount: 0,
     pendingConfirmedCount: 0,
@@ -362,15 +377,31 @@ export default function DashboardPage() {
     const xs = trend.map((x) => dayjs(x.date).format("YYYY-MM-DD"));
     const ys = trend.map((x) => Number(x.amount || 0));
     return {
-      tooltip: { trigger: "axis", valueFormatter: (v: any) => Number(v || 0).toLocaleString() },
-      grid: { left: 48, right: 20, top: 30, bottom: 36 },
+      tooltip: { 
+        trigger: "axis", 
+        valueFormatter: (v: any) => `฿ ${Number(v || 0).toLocaleString()}`,
+        axisPointer: { type: 'shadow' }
+      },
+      grid: { left: 55, right: 20, top: 30, bottom: 36 },
       xAxis: {
         type: "category",
         data: xs,
-        axisLabel: { interval: "auto", formatter: (v: string) => dayjs(v).format("MM-DD") },
+        axisLabel: { interval: "auto", formatter: (v: string) => dayjs(v).format("DD MMM") },
+        axisLine: { lineStyle: { color: '#e5e7eb' } },
+        axisTick: { show: false }
       },
-      yAxis: { type: "value", axisLabel: { formatter: (v: any) => Number(v || 0).toLocaleString() } },
-      series: [{ type: "line", smooth: true, data: ys, areaStyle: {}, symbolSize: 8 }],
+      yAxis: { 
+        type: "value", 
+        splitLine: { lineStyle: { type: 'dashed', color: '#f3f4f6' } },
+        axisLabel: { formatter: (v: any) => v >= 10000 ? `${(v/1000).toLocaleString()}k` : v.toLocaleString() } 
+      },
+      series: [{ 
+        name: 'ยอดขาย',
+        type: "bar", 
+        barMaxWidth: 45,
+        itemStyle: { color: '#3b82f6', borderRadius: [6, 6, 0, 0] },
+        data: ys 
+      }],
     };
   }, [trend]);
 
@@ -402,13 +433,23 @@ export default function DashboardPage() {
     const rows = commBySeller.slice(0, 8);
     return {
       tooltip: { trigger: "item" },
-      legend: { bottom: 0 },
+      legend: { show: false },
       series: [
         {
           type: "pie",
-          radius: ["45%", "70%"],
+          radius: ["45%", "65%"],
           itemStyle: { borderRadius: 8, borderColor: "#fff", borderWidth: 2 },
-          label: { show: false },
+          label: {
+            show: true,
+            position: 'outside',
+            formatter: '{b}\\n{d}%',
+            fontSize: 12
+          },
+          labelLine: {
+            show: true,
+            length: 10,
+            length2: 15
+          },
           data: rows.map((r) => ({
             name: r.seller_name || r.seller_email || (r.seller_id ? `Seller#${r.seller_id}` : "ไม่ระบุ"),
             value: Number(r.commission_total || 0),
@@ -628,28 +669,95 @@ export default function DashboardPage() {
           <DatePicker.RangePicker
             value={range}
             onChange={(v) => v?.[0] && v?.[1] && setRange([v[0], v[1]])}
+            presets={[
+              { label: 'วันนี้', value: [dayjs(), dayjs()] },
+              { label: 'เมื่อวาน', value: [dayjs().subtract(1, 'day'), dayjs().subtract(1, 'day')] },
+              { label: 'สัปดาห์นี้', value: [dayjs().startOf('week'), dayjs().endOf('week')] },
+              { label: 'เดือนนี้', value: [dayjs().startOf('month'), dayjs().endOf('month')] },
+              { label: 'เดือนที่แล้ว', value: [dayjs().subtract(1, 'month').startOf('month'), dayjs().subtract(1, 'month').endOf('month')] },
+            ]}
           />
           <Button icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)}>ตั้งค่า</Button>
           <Button icon={<ReloadOutlined />} onClick={loadAll} loading={loading}>Refresh</Button>
         </Space>
       </div>
 
-      {/* KPI Sales/Stock */}
+      {/* KPI Sales/Financials */}
       <Row gutter={[16, 16]}>
         <Col xs={24} md={6}>
-          <KpiCardSimple title="จำนวนรายการสินค้า (SKU)" value={cards.skuCount} hint="นับจาก product_stock" icon={<AppstoreOutlined />} />
+          <KpiCardSimple 
+            title={<><DollarOutlined /> ยอดขายรวม (ช่วงที่เลือก)</>}
+            value={Number(cards.salesTotal || 0).toLocaleString()} 
+            hint={`เอกสารขาย ${cards.invoiceCount || 0} บิล`} 
+            icon={<DollarOutlined />}
+            titleColor="text-blue-600"
+            valueColor="text-blue-700"
+            iconColor="text-blue-200"
+          />
         </Col>
         <Col xs={24} md={6}>
           <KpiCardSimple 
-            title="จำนวนคงเหลือในคลัง (ชิ้น)" 
+            title={<><StockOutlined /> กำไรสุทธิ (Profit)</>}
+            value={Number(cards.profitTotal || 0).toLocaleString()} 
+            hint="หักต้นทุน COGS แล้ว" 
+            icon={<StockOutlined />}
+            titleColor="text-emerald-600"
+            valueColor="text-emerald-700"
+            iconColor="text-emerald-200"
+          />
+        </Col>
+        <Col xs={24} md={6}>
+          <KpiCardSimple 
+            title={<><ShoppingCartOutlined /> ดำเนินการ (Pending)</>}
+            value={pendingTotal} 
+            hint={`รอจัดส่ง: ${cards.pendingConfirmedCount} | รอยืนยัน: ${cards.pendingDraftCount}`} 
+            icon={<ShoppingCartOutlined />}
+            titleColor="text-orange-500"
+            valueColor="text-orange-600"
+            iconColor="text-orange-200"
+          />
+        </Col>
+        <Col xs={24} md={6}>
+          <KpiCardSimple 
+            title={<><AlertOutlined /> สินค้าใกล้หมด (Low Stock)</>}
+            value={cards.lowStockCount} 
+            hint={`ต่ำกว่าเกณฑ์ ${settings.lowStockThreshold} ชิ้น`} 
+            icon={<AlertOutlined />}
+            titleColor="text-red-500"
+            valueColor="text-red-600"
+            iconColor="text-red-200"
+          />
+        </Col>
+      </Row>
+
+      {/* KPI Inventory */}
+      <Title level={5} className="!mb-2 mt-6 text-gray-500">Inventory Operations</Title>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} md={6}>
+          <KpiCardSimple 
+            title={<><AppstoreOutlined /> จำนวนรายการสินค้า (SKU)</>}
+            value={Number(cards.skuCount || 0).toLocaleString()} 
+            hint="นับจาก product_stock" 
+            icon={<AppstoreOutlined />} 
+            titleColor="text-indigo-600"
+            valueColor="text-indigo-700"
+            iconColor="text-indigo-200"
+          />
+        </Col>
+        <Col xs={24} md={6}>
+          <KpiCardSimple 
+            title={<><InboxOutlined /> จำนวนคงเหลือในคลัง (ชิ้น)</>}
             value={Number(cards.stockQty || 0).toLocaleString()} 
             hint="รวมทุกคลัง" 
             icon={<InboxOutlined />} 
+            titleColor="text-teal-600"
+            valueColor="text-teal-700"
+            iconColor="text-teal-200"
             action={
               <Button 
                 size="small" 
                 icon={<DownloadOutlined />} 
-                style={{borderColor: "#129b1dff", color: "#129b1dff"}}
+                style={{borderColor: "#0d9488", color: "#0d9488"}}
                 onClick={async () => {
                   try {
                     const res = await api.get("/reports/stock/export", { responseType: "blob" });
@@ -667,12 +775,6 @@ export default function DashboardPage() {
               </Button>
             }
           />
-        </Col>
-        <Col xs={24} md={6}>
-          <KpiCardSimple title="สินค้าใกล้หมด" value={cards.lowStockCount} hint={`ต่ำกว่า ${settings.lowStockThreshold} ชิ้น`} icon={<ShoppingCartOutlined />} />
-        </Col>
-        <Col xs={24} md={6}>
-          <KpiCardSimple title="ยอดขายรวม (ช่วงที่เลือก)" value={Number(cards.salesTotal || 0).toLocaleString()} hint={`เอกสารขาย ${cards.invoiceCount || 0} | Pending ${pendingTotal}`} icon={<DollarOutlined />} />
         </Col>
       </Row>
 
@@ -720,7 +822,7 @@ export default function DashboardPage() {
       {/* Sales Trend */}
       <Row gutter={[16, 16]}>
         <Col span={24}>
-          <Card className="rounded-xl" title={<div className="font-semibold">Sales Trend</div>} extra={<span className="text-xs text-gray-500">คลิ๊กจุดเพื่อดูรายบุคคล</span>}>
+          <Card className="rounded-xl border-gray-100 shadow-sm" title={<div className="font-semibold text-blue-600 flex items-center gap-2"><LineChartOutlined /> Sales Trend (แนวโน้มยอดขาย)</div>} extra={<span className="text-xs text-gray-500">คลิ๊กกราฟเพื่อดูรายบุคคล</span>}>
             {canSales ? (
               <ReactECharts
                 option={trendOption}
@@ -740,37 +842,31 @@ export default function DashboardPage() {
         </Col>
       </Row>
 
-      {/* Hot + Top Vendors */}
+      {/* Hot + Top Vendors + Comm Share */}
       <Row gutter={[16, 16]}>
-        <Col xs={24} xl={12}>
-          <Card className="rounded-xl" title={<div className="font-semibold">Hot Sellers (Sales)</div>} extra={<span className="text-xs text-gray-500">Top {settings.hotSellerTopN}</span>}>
+        <Col xs={24} xl={8}>
+          <Card className="rounded-xl border-gray-100 shadow-sm" title={<div className="font-semibold text-orange-600 flex items-center gap-2"><FireOutlined /> สินค้าขายดี (Hot Sellers)</div>} extra={<span className="text-xs text-gray-500">Top {settings.hotSellerTopN}</span>}>
             {canSales ? <ReactECharts option={hotSellerOption} style={{ height: 280 }} /> : <div>ไม่มีสิทธิ sales</div>}
           </Card>
         </Col>
-        <Col xs={24} xl={12}>
-          <Card className="rounded-xl" title={<div className="font-semibold">Top Vendors (Purchase)</div>} extra={<span className="text-xs text-gray-500">Top {settings.topVendorTopN || 10}</span>}>
+        <Col xs={24} xl={8}>
+          <Card className="rounded-xl border-gray-100 shadow-sm" title={<div className="font-semibold text-purple-600 flex items-center gap-2"><StarOutlined /> ผู้จำหน่ายยอดนิยม (Top Vendors)</div>} extra={<span className="text-xs text-gray-500">Top {settings.topVendorTopN || 10}</span>}>
             {canViewStock ? <ReactECharts option={topVendorOption} style={{ height: 280 }} /> : <div>ไม่มีสิทธิ stock</div>}
           </Card>
         </Col>
-      </Row>
-
-      {/* Commission Share & Low Stock */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} xl={12}>
-           <Card className="rounded-xl" title={<div className="font-semibold">Commission Share</div>} extra={<span className="text-xs text-gray-500">Top 8</span>}>
+        <Col xs={24} xl={8}>
+           <Card className="rounded-xl border-gray-100 shadow-sm" title={<div className="font-semibold text-teal-600 flex items-center gap-2"><PieChartOutlined /> สัดส่วนค่าคอมมิชชั่น (Commission Share)</div>} extra={<span className="text-xs text-gray-500">Top 8</span>}>
             {canSales ? <ReactECharts option={commPieOption} style={{ height: 280 }} /> : <div>ไม่มีสิทธิ sales</div>}
           </Card>
         </Col>
-         <Col xs={24} xl={12}>
-           {/* Comm Table moved here if needed or separate */}
-        </Col>
       </Row>
 
-      {/* Low Stock */}
+      {/* Low Stock & Commission By Seller (คู่กัน) */}
       <Row gutter={[16, 16]}>
-        <Col span={24}>
-          <Card className="rounded-xl" title={<div className="font-semibold">สินค้าใกล้หมด (Low Stock)</div>} extra={<span className="text-xs text-gray-500">เรียงตาม “ต้องเติม”</span>}>
+        <Col xs={24} xl={12}>
+          <Card className="rounded-xl border-gray-100 shadow-sm" title={<div className="font-semibold text-red-500 flex items-center gap-2"><ExclamationCircleOutlined /> สินค้าใกล้หมด (Low Stock)</div>} extra={<span className="text-xs text-gray-500">เรียงตาม “ต้องเติม”</span>}>
             <Table
+              scroll={{ x: 'max-content' }}
               rowKey={(r) => `${r.warehouse_id}-${r.product_id}`}
               columns={lowStockColumns as any}
               dataSource={lowStockRows}
@@ -779,13 +875,10 @@ export default function DashboardPage() {
             />
           </Card>
         </Col>
-      </Row>
-
-      {/* ✅ Commission By Seller (คลิ๊กแถวได้) */}
-      <Row gutter={[16, 16]}>
-        <Col span={24}>
-          <Card className="rounded-xl" title={<div className="font-semibold">สรุปค่าคอมตามผู้ขาย</div>} extra={<span className="text-xs text-gray-500">คลิ๊กแถวเพื่อดู INV</span>}>
+        <Col xs={24} xl={12}>
+          <Card className="rounded-xl border-gray-100 shadow-sm" title={<div className="font-semibold text-indigo-500 flex items-center gap-2"><TeamOutlined /> สรุปค่าคอมตามผู้ขาย (Commission by Seller)</div>} extra={<span className="text-xs text-gray-500">คลิ๊กแถวเพื่อดู INV</span>}>
             <Table
+              scroll={{ x: 'max-content' }}
               rowKey={(r) => String((r as any).seller_id ?? "null")}
               columns={commColumns as any}
               dataSource={commBySeller}

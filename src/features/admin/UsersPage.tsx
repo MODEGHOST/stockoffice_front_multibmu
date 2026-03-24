@@ -13,6 +13,7 @@ import {
   Switch,
   Space,
 } from "antd";
+import { UsergroupAddOutlined, PlusOutlined, SafetyCertificateOutlined, KeyOutlined } from "@ant-design/icons";
 import api from "../../lib/api";
 
 type RoleRow = { id: number; code: string; name: string };
@@ -134,7 +135,7 @@ export default function UsersPage() {
 
     setSavingRoles(true);
     try {
-      await api.put(`/api/admin/users/${targetUser?.id}/roles`, {
+      await api.put(`/admin/users/${targetUser?.id}/roles`, {
         role_ids: v.role_id ? [v.role_id] : [],
       });
 
@@ -176,16 +177,23 @@ export default function UsersPage() {
   return (
     <div className="p-4">
       <Card
-        title="จัดการผู้ใช้ในบริษัท"
+        className="rounded-xl shadow-sm border-gray-100"
+        title={
+          <div className="font-semibold text-gray-700 flex items-center gap-2">
+            <UsergroupAddOutlined className="text-orange-500" /> 
+            จัดการผู้ใช้ในบริษัท
+          </div>
+        }
         extra={
           <Space>
-            <Button type="primary" onClick={onOpenCreate}>
+            <Button type="primary" icon={<PlusOutlined />} onClick={onOpenCreate} className="px-6 rounded-lg">
               เพิ่มผู้ใช้
             </Button>
           </Space>
         }
       >
         <Table
+          scroll={{ x: 'max-content' }}
           rowKey="id"
           loading={loading}
           dataSource={rows}
@@ -209,9 +217,9 @@ export default function UsersPage() {
               dataIndex: "roles",
               render: (rs: RoleRow[]) =>
                 (rs || []).length ? (
-                  rs.map((r) => <Tag key={r.id}>{r.code}</Tag>)
+                  rs.map((r) => <Tag color="blue" key={r.id}>{r.name || r.code}</Tag>)
                 ) : (
-                  <Tag>none</Tag>
+                  <Tag color="default">ไม่มีสิทธิ์</Tag>
                 ),
             },
             {
@@ -230,11 +238,11 @@ export default function UsersPage() {
               title: "จัดการ",
               render: (_: any, u: UserRow) => (
                 <Space>
-                  <Button size="small" onClick={() => onOpenRoleModal(u)}>
+                  <Button size="small" icon={<SafetyCertificateOutlined />} onClick={() => onOpenRoleModal(u)}>
                     กำหนด Role
                   </Button>
-                  <Button size="small" danger onClick={() => onOpenResetPass(u)}>
-                    รีเซ็ตรหัสผ่าน
+                  <Button size="small" danger icon={<KeyOutlined />} onClick={() => onOpenResetPass(u)}>
+                    รีเซ็ต
                   </Button>
                 </Space>
               ),
@@ -272,7 +280,10 @@ export default function UsersPage() {
           <Form.Item
             name="email"
             label="อีเมล"
-            rules={[{ required: true, type: "email" }]}
+            rules={[
+              { required: true, message: "กรุณาระบุอีเมล" },
+              { type: "email", message: "รูปแบบอีเมลไม่ถูกต้อง" }
+            ]}
           >
             <Input />
           </Form.Item>
@@ -280,9 +291,12 @@ export default function UsersPage() {
           <Form.Item
             name="phone"
             label="เบอร์โทร"
-            rules={[{ required: true, min: 3 }]}
+            rules={[
+              { required: true, message: "กรุณาระบุเบอร์โทร" },
+              { pattern: /^[0-9]{9,10}$/, message: "เบอร์โทรต้องเป็นตัวเลข 9-10 หลัก" }
+            ]}
           >
-            <Input />
+            <Input maxLength={10} />
           </Form.Item>
 
           <Form.Item
@@ -305,30 +319,48 @@ export default function UsersPage() {
 
       {/* ---------- Roles Modal ---------- */}
       <Modal
-        title={`กำหนด Role: ${targetUser?.email || ""}`}
+        title={
+          <div className="flex items-center gap-2 text-lg text-gray-800">
+            <SafetyCertificateOutlined className="text-orange-500 text-2xl" />
+            กำหนดสิทธิ์การใช้งาน (Assign Role)
+          </div>
+        }
         open={openRoles}
         onCancel={() => setOpenRoles(false)}
         onOk={submitRoles}
-        okText="บันทึก"
+        okText="ยืนยันการเปลี่ยนสิทธิ์"
+        cancelText="ยกเลิก"
         centered
         confirmLoading={savingRoles}
         width={500}
       >
-        <Form layout="vertical" form={roleForm}>
+        <div className="bg-orange-50 rounded-lg p-4 mb-6 mt-2 border border-orange-100 flex items-center justify-between">
+          <div>
+             <div className="text-xs text-orange-600 font-semibold mb-1">กำลังจัดการสิทธิ์ของบัญชี:</div>
+             <div className="text-gray-800 font-medium">{targetUser?.display_name || `${targetUser?.first_name || ""} ${targetUser?.last_name || ""}`.trim() || targetUser?.email}</div>
+             <div className="text-gray-500 text-sm">{targetUser?.email}</div>
+          </div>
+        </div>
+
+        <Form layout="vertical" form={roleForm} className="mt-4">
           <Form.Item
             name="role_id" 
-            label="เลือก Role"
+            label={<span className="font-medium text-gray-700">เลือกระดับสิทธิ์ (Role)</span>}
             rules={[{ required: true, message: "กรุณาเลือก Role" }]}
           >
             <Select
-              placeholder="เลือก role"
+              size="large"
+              placeholder="-- กรุณาเลือกระดับสิทธิ์ --"
               showSearch
               optionFilterProp="label"
               style={{ width: "100%" }}
-              options={roles.map((r) => ({
-                value: r.id,
-                label: `${r.code} - ${r.name}`,
-              }))}
+              options={[
+                { value: null, label: "ไม่มีสิทธิ์ (None)" },
+                ...roles.map((r) => ({
+                  value: r.id,
+                  label: `${r.code} - ${r.name}`,
+                }))
+              ]}
             />
           </Form.Item>
         </Form>
@@ -336,25 +368,37 @@ export default function UsersPage() {
 
       {/* ---------- Reset Password Modal ---------- */}
       <Modal
-        title={`รีเซ็ตรหัสผ่าน: ${targetUser?.email || ""}`}
+        title={
+          <div className="flex items-center gap-2 text-lg text-gray-800">
+            <KeyOutlined className="text-red-500 text-2xl" />
+            รีเซ็ตรหัสผ่าน (Reset Password)
+          </div>
+        }
         open={openResetPass}
         onCancel={() => setOpenResetPass(false)}
         onOk={submitResetPass}
-        okText="บันทึกรหัสผ่านใหม่"
+        okText="ยืนยันการตั้งรหัสผ่านใหม่"
+        cancelText="ยกเลิก"
+        okButtonProps={{ danger: true }}
         centered
         confirmLoading={savingResetPass}
-        width={400}
+        width={450}
       >
+        <div className="bg-red-50 rounded-lg p-3 mb-5 mt-2 border border-red-100">
+           <div className="text-xs text-red-600 font-semibold mb-1">ระบุรหัสผ่านใหม่สำหรับ:</div>
+           <div className="text-gray-800 font-medium">{targetUser?.email}</div>
+        </div>
+
         <Form layout="vertical" form={resetPassForm}>
           <Form.Item
             name="new_password"
-            label="รหัสผ่านใหม่"
+            label={<span className="font-medium text-gray-700">รหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร)</span>}
             rules={[
               { required: true, message: "กรุณาระบุรหัสผ่านใหม่" },
               { min: 6, message: "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร" },
             ]}
           >
-            <Input.Password placeholder="ระบุรหัสผ่านใหม่" autoComplete="new-password" />
+            <Input.Password size="large" placeholder="ระบุรหัสผ่านใหม่..." autoComplete="new-password" />
           </Form.Item>
         </Form>
       </Modal>

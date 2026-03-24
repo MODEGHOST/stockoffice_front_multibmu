@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { Menu, Button, Space } from "antd";
 import { useNavigate } from "react-router-dom";
 import { getMeCache, hasPermission, me, logout, subscribeAuth } from "../features/auth/authStore";
+import CompanySwitcher from "./CompanySwitcher";
+import PwaInstallPrompt from "./PwaInstallPrompt";
 
 export default function Navbar() {
   const nav = useNavigate();
@@ -50,10 +52,12 @@ export default function Navbar() {
   ].filter(Boolean);
 
   const adminChildren = [
+    getMeCache()?.roles?.includes("system_owner") ? { key: "/admin/companies", label: "จัดการบริษัทลูกค้า" } : null,
     hasPermission("master.user.manage") ? { key: "/admin/users", label: "ผู้ใช้งาน" } : null,
     hasPermission("master.role.manage") ? { key: "/admin/roles", label: "สิทธิ์การใช้งาน" } : null,
     hasPermission("master.user.manage") ? { key: "/admin/commissions", label: "จ่ายค่าคอมมิชชั่น" } : null,
-    hasPermission("master.company.manage") ? { key: "/admin/settings", label: "ตั้งค่าบริษัท" } : null,
+    hasPermission("master.company.manage") ? { key: "/admin/settings", label: "ตั้งค่าระบบ" } : null,
+    hasPermission("system.settings.manage") ? { key: "/admin/logs", label: "ประวัติการใช้งาน" } : null,
   ].filter(Boolean);
 
   const items = [
@@ -78,6 +82,8 @@ export default function Navbar() {
       />
 
       <Space>
+        <PwaInstallPrompt />
+        {getMeCache()?.roles?.includes("system_owner") && <CompanySwitcher />}
         <span className="text-sm text-gray-600">{user?.email}</span>
         <Button
           onClick={() => {

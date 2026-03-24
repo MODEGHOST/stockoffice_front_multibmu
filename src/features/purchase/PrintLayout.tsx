@@ -1,6 +1,7 @@
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import dayjs from "dayjs";
+import api from "../../lib/api";
 
 
 interface PrintLayoutProps {
@@ -46,6 +47,18 @@ export const PrintLayout = React.forwardRef<HTMLDivElement, PrintLayoutProps>(
       rightLabel = "Ship To (จัดส่งที่)"
     } = props;
 
+    const [company, setCompany] = useState<any>(null);
+    useEffect(() => {
+      api.get("/company/settings").then(res => setCompany(res.data)).catch(() => {});
+    }, []);
+
+    const compName = company?.name || "บริษัท บิลด์มีอัพ คอนซัลแทนท์ จำกัด";
+    const compAddress = company 
+      ? [company.address, company.sub_district && `ต.${company.sub_district}`, company.district && `อ.${company.district}`, company.province && `จ.${company.province}`, company.zip_code].filter(Boolean).join(" ")
+      : "212/249-250 หมู่บ้านคุณาลัย คอร์ทยาร์ด ถนนบ้านกล้วย-ไทรน้อย ตำบลพิมลราช อำเภอบางบัวทอง นนทบุรี 11110";
+    const compPhone = company?.phone || "02-123-4567";
+    const compTaxId = company?.tax_id || "1234567890123";
+
     return (
       <div ref={ref} className="bg-white text-slate-800 print-container font-sans" style={{ minHeight: "297mm", width: "210mm", margin: "0 auto", padding: "40px" }}>
         
@@ -55,11 +68,11 @@ export const PrintLayout = React.forwardRef<HTMLDivElement, PrintLayoutProps>(
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
            <div className="flex-1">
-               <h1 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">บริษัท บิลด์มีอัพ คอนซัลแทนท์ จำกัด</h1>
+               <h1 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">{compName}</h1>
                <div className="text-sm text-slate-500 leading-relaxed">
-                  <p>212/249-250 หมู่บ้านคุณาลัย คอร์ทยาร์ด ถนนบ้านกล้วย-ไทรน้อย ตำบลพิมลราช อำเภอบางบัวทอง นนทบุรี 11110</p>
-                  <p>Tel: 02-123-4567</p>
-                  <p>Tax ID: 1234567890123</p>
+                  <p>{compAddress}</p>
+                  <p>Tel: {compPhone}</p>
+                  <p>Tax ID: {compTaxId}</p>
                </div>
            </div>
            <div className="text-right">

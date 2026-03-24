@@ -3,6 +3,7 @@ import { Button, Card, Input, Space, Table, Tag, message } from "antd";
 import type { ColumnsType, TableProps } from "antd/es/table";
 import { useNavigate } from "react-router-dom";
 import api from "../../lib/api";
+import { useQuery } from "@tanstack/react-query";
 import { ReloadOutlined, PlusOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 
@@ -25,44 +26,44 @@ function statusTag(s: string) {
 
 export default function QuotationListPage() {
   const nav = useNavigate();
-  const [loading, setLoading] = useState(false);
-  const [rows, setRows] = useState<SaleRow[]>([]);
+  const QUERY_KEY = ["sales-quotations"];
+
   const [q, setQ] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [total, setTotal] = useState(0);
 
   // Sorting
   const [sortKey, setSortKey] = useState<string>("");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
-  const params = useMemo(() => {
-    const p: Record<string, any> = { page, limit: pageSize };
-    if (q.trim()) p.q = q.trim();
-    if (sortKey) {
-       p.sortKey = sortKey;
-       p.sortOrder = sortOrder;
-    }
-    return p;
-  }, [q, page, pageSize, sortKey, sortOrder]);
-
-  async function load() {
-    setLoading(true);
-    try {
-      const { data } = await api.get("/sales/invoice", { params });
-      setRows(Array.isArray(data?.rows) ? data.rows : []);
-      setTotal(Number(data?.total || 0));
-    } catch (e: any) {
-      message.error(e?.response?.data?.message || e?.message || "โหลดข้อมูลไม่สำเร็จ", 2);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params]);
+    const handler = setTimeout(() => {
+      setSearchQuery(q);
+      setPage(1);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [q]);
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: [...QUERY_KEY, searchQuery, page, pageSize, sortKey, sortOrder],
+    queryFn: async () => {
+      const p: Record<string, any> = { page, limit: pageSize };
+      if (searchQuery.trim()) p.q = searchQuery.trim();
+      if (sortKey) {
+        p.sortKey = sortKey;
+        p.sortOrder = sortOrder;
+      }
+      const { data } = await api.get("/sales/invoice", { params: p });
+      return {
+        rows: Array.isArray(data?.rows) ? data.rows : [],
+        total: Number(data?.total || 0),
+      };
+    },
+  });
+
+  const rows = data?.rows || [];
+  const total = data?.total || 0;
 
   const onTableChange: TableProps<SaleRow>["onChange"] = (pagination, _filters, sorter) => {
      setPage(pagination.current || 1);
@@ -167,7 +168,7 @@ export default function QuotationListPage() {
               style={{ width: 240 }}
               allowClear
             />
-            <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
+            <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isLoading}>
               Refresh
             </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => nav("/sales/invoice/new")}>
@@ -178,10 +179,11 @@ export default function QuotationListPage() {
       >
         <Table
           rowKey="id"
-          loading={loading}
+          loading={isLoading}
           columns={columns}
           dataSource={rows}
           onChange={onTableChange}
+          scroll={{ x: 'max-content' }}
           pagination={{
             current: page,
             pageSize,

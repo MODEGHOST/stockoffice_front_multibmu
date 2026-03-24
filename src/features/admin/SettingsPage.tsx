@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
-import { Button, Card, Form, Input, message, Tabs, Table, Select, Tag } from "antd";
+import { Button, Form, Input, message, Tabs, Table, Select, Tag } from "antd";
+import { SettingOutlined, SaveOutlined, BankOutlined, FileTextOutlined } from "@ant-design/icons";
 import api from "../../lib/api";
+import AddressSelect from "../../components/AddressSelect";
 
 type Company = {
   id: number;
   name: string;
   tax_id: string;
   address: string;
+  province?: string;
+  district?: string;
+  sub_district?: string;
+  zip_code?: string;
   phone: string;
   email: string;
   is_active: number;
@@ -35,7 +41,15 @@ export default function SettingsPage() {
     try {
       const { data } = await api.get("/company/settings");
       setData(data);
-      form.setFieldsValue(data);
+      form.setFieldsValue({
+        ...data,
+        addressObj: {
+          province: data.province,
+          district: data.district,
+          sub_district: data.sub_district,
+          zip_code: data.zip_code,
+        }
+      });
     } catch (e) {
       message.error("Failed to load settings");
     } finally {
@@ -46,7 +60,19 @@ export default function SettingsPage() {
   async function onSaveCompany(values: any) {
     setSaving(true);
     try {
-      await api.put("/company/settings", values);
+      const payload = {
+        name: values.name,
+        tax_id: values.tax_id,
+        phone: values.phone,
+        email: values.email,
+        address: values.address,
+        province: values.addressObj?.province || null,
+        district: values.addressObj?.district || null,
+        sub_district: values.addressObj?.sub_district || null,
+        zip_code: values.addressObj?.zip_code || null,
+      };
+
+      await api.put("/company/settings", payload);
       message.success("Company info updated");
       load();
     } catch (e) {
@@ -125,54 +151,91 @@ export default function SettingsPage() {
   });
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">System Settings</h1>
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto">
+      <div className="flex items-center gap-3 mb-6">
+        <SettingOutlined className="text-3xl text-orange-500" />
+        <h1 className="text-2xl font-bold m-0 text-gray-800">ตั้งค่าระบบ (System Settings)</h1>
+      </div>
       
-      <Tabs defaultActiveKey="1" items={[
+      <Tabs defaultActiveKey="1" className="bg-white p-4 rounded-xl shadow-sm border border-gray-100" items={[
         {
           key: "1",
-          label: "Company Info",
+          label: <span className="flex items-center gap-2"><BankOutlined /> ข้อมูลบริษัท (Company Info)</span>,
           children: (
-            <Card loading={loading}>
+            <div className="py-2">
               <Form form={form} layout="vertical" onFinish={onSaveCompany}>
-                <div className="grid grid-cols-2 gap-4">
-                  <Form.Item label="Company Name" name="name" rules={[{ required: true }]}>
-                    <Input />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
+                  <Form.Item label="Company Name (ชื่อบริษัท)" name="name" rules={[{ required: true }]}>
+                    <Input size="large" />
                   </Form.Item>
-                  <Form.Item label="Tax ID" name="tax_id">
-                    <Input />
+                  <Form.Item 
+                    label="Tax ID (เลขประจำตัวผู้เสียภาษี)" 
+                    name="tax_id"
+                    rules={[
+                      { pattern: /^[0-9]{13}$/, message: "เลขประจำตัวผู้เสียภาษีต้องเป็นตัวเลข 13 หลัก" }
+                    ]}
+                  >
+                    <Input size="large" maxLength={13} />
                   </Form.Item>
-                  <Form.Item label="Phone" name="phone">
-                    <Input />
+                  <Form.Item 
+                    label="Phone (เบอร์โทรศัพท์)" 
+                    name="phone"
+                    rules={[
+                      { pattern: /^[0-9]{9,10}$/, message: "เบอร์โทรศัพท์ต้องเป็นตัวเลข 9-10 หลัก" }
+                    ]}
+                  >
+                    <Input size="large" maxLength={10} />
                   </Form.Item>
-                  <Form.Item label="Email" name="email">
-                    <Input />
-                  </Form.Item>
-                  <Form.Item label="Address" name="address" className="col-span-2">
-                    <Input.TextArea rows={3} />
+                  <Form.Item 
+                    label="Email (อีเมล)" 
+                    name="email"
+                    rules={[
+                      { type: "email", message: "รูปแบบอีเมลไม่ถูกต้อง" }
+                    ]}
+                  >
+                    <Input size="large" />
                   </Form.Item>
                 </div>
-                <Button type="primary" htmlType="submit" loading={saving}>Save Changes</Button>
+                
+                <div className="mt-6 p-5 bg-orange-50/40 rounded-xl border border-orange-100">
+                  <h3 className="text-sm font-bold text-gray-800 border-b border-orange-200 pb-2 mb-4">ข้อมูลที่ตั้ง (Address Information)</h3>
+                  <Form.Item label="ที่อยู่ส่วนต้น (เลขที่, อาคาร, ชั้น, หมู่, ซอย, ถนน)" name="address" className="mb-4">
+                    <Input size="large" placeholder="เช่น เลขที่ 123/4 หมู่ 5 อาคาร X ชั้น 9 ซอย Y ถนน Z" />
+                  </Form.Item>
+                  <Form.Item name="addressObj" className="mb-0">
+                    <AddressSelect />
+                  </Form.Item>
+                </div>
+
+                <div className="flex justify-end mt-4">
+                  <Button type="primary" htmlType="submit" size="large" icon={<SaveOutlined />} loading={saving} className="px-8 rounded-lg">
+                    บันทึกข้อมูล (Save)
+                  </Button>
+                </div>
               </Form>
-            </Card>
+            </div>
           )
         },
         {
           key: "2",
-          label: "Document Numbers",
+          label: <span className="flex items-center gap-2"><FileTextOutlined /> เลขที่เอกสาร (Document Numbers)</span>,
           children: (
-            <Card title="Running Number Configuration">
+            <div className="py-2">
+               <div className="text-sm text-gray-500 mb-4">กำหนด รูปแบบตัวย่อ (Prefix) และการรีเซ็ตเลข Running Number ของแต่ละเอกสาร อัตโนมัติเมื่อกดเปลี่ยน</div>
                <Table 
+                 scroll={{ x: 'max-content' }}
                  dataSource={docRows} 
                  columns={columns} 
                  rowKey="doc_type" 
                  pagination={false}
                  loading={loading}
+                 bordered
+                 className="rounded-lg overflow-hidden"
                />
                <div className="mt-4 text-xs text-gray-400">
                   * Auto-saved when focus is lost or changed.
                </div>
-            </Card>
+            </div>
           )
         }
       ]} />

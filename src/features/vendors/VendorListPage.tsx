@@ -20,8 +20,9 @@ import {
   message,
   Collapse,
 } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import type { ColumnsType, TableProps } from "antd/es/table";
 import dayjs from "dayjs";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import {
   createVendor,
@@ -357,10 +358,15 @@ const PERSONAL_FORM_OPTIONS: Array<{ value: LegalFormCode; label: string }> = [
 
 export default function VendorListPage() {
   const canManage = hasPermission("master.vendor.manage");
+  const queryClient = useQueryClient();
+  const QUERY_KEY = ["vendors"];
 
-  const [loading, setLoading] = useState(false);
-  const [rows, setRows] = useState<VendorRow[]>([]);
   const [q, setQ] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [sortKey, setSortKey] = useState<string>("id");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("business");
@@ -369,35 +375,39 @@ export default function VendorListPage() {
 
   const [form] = Form.useForm<FormValues>();
 
-  async function load() {
-    setLoading(true);
-    try {
-      const r = await listVendors();
-      setRows(r);
-    } catch (e: any) {
-      message.error(e?.response?.data?.message || "โหลด Vendors ไม่สำเร็จ", 2);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    if (canManage) load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canManage]);
+    const handler = setTimeout(() => {
+      setSearchQuery(q);
+      setPage(1);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [q]);
 
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return rows;
-    return rows.filter((r) => {
-      const code = (r.code ?? "").toLowerCase();
-      const name = (r.name ?? "").toLowerCase();
-      const tax = (r.tax_id ?? "").toLowerCase();
-      const phone = (r.phone ?? "").toLowerCase();
-      const email = (r.email ?? "").toLowerCase();
-      return code.includes(needle) || name.includes(needle) || tax.includes(needle) || phone.includes(needle) || email.includes(needle);
-    });
-  }, [rows, q]);
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: [...QUERY_KEY, searchQuery, page, pageSize, sortKey, sortOrder],
+    queryFn: () => listVendors({ q: searchQuery, page, limit: pageSize, sortKey, sortOrder }),
+    enabled: !!canManage,
+  });
+
+  const rows = data?.rows || [];
+  const total = data?.total || 0;
+
+  const onTableChange: TableProps<VendorRow>["onChange"] = (pagination, _filters, sorter) => {
+    setPage(pagination.current || 1);
+    setPageSize(pagination.pageSize || 20);
+
+    if (Array.isArray(sorter)) return;
+    const field = sorter.field as string;
+    const order = sorter.order;
+
+    if (field && order) {
+      setSortKey(field);
+      setSortOrder(order === "ascend" ? "asc" : "desc");
+    } else {
+      setSortKey("id");
+      setSortOrder("desc");
+    }
+  };
 
   function ensureOnePrimaryExtraContacts() {
     const list = form.getFieldValue("extra_contacts") || [];
@@ -900,7 +910,7 @@ export default function VendorListPage() {
       }
 
       setOpen(false);
-      await load();
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
     } catch (e: any) {
       message.error(e?.response?.data?.message || "บันทึกไม่สำเร็จ", 2);
     } finally {
@@ -912,7 +922,7 @@ export default function VendorListPage() {
     try {
       await setVendorActive(row.id, next ? 1 : 0);
       message.success("อัปเดตสถานะแล้ว", 1.2);
-      await load();
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
     } catch (e: any) {
       message.error(e?.response?.data?.message || "อัปเดตสถานะไม่สำเร็จ", 2);
     }
@@ -1067,7 +1077,7 @@ export default function VendorListPage() {
 
         <Space>
           <Input placeholder="ค้นหา รหัส/ชื่อ/Tax/เบอร์/อีเมล" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 360 }} allowClear />
-          <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
+          <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isLoading}>
             รีเฟรช
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
@@ -1077,7 +1087,20 @@ export default function VendorListPage() {
       </div>
 
       <Card>
-        <Table rowKey="id" loading={loading} columns={columns} dataSource={filtered} pagination={{ pageSize: 10 }} />
+        <Table
+          rowKey="id"
+          loading={isLoading}
+          columns={columns}
+          dataSource={rows}
+          onChange={onTableChange}
+          pagination={{
+            current: page,
+            pageSize,
+            total,
+            showSizeChanger: true,
+            pageSizeOptions: [10, 20, 50, 100],
+          }}
+        />
       </Card>
 
       <Modal
@@ -1122,7 +1145,13 @@ export default function VendorListPage() {
                       <Switch checkedChildren="Active" unCheckedChildren="Inactive" />
                     </Form.Item>
 
-                    <Form.Item name={["business", "tax_no_13"]} label="เลขทะเบียน 13 หลัก">
+                    <Form.Item 
+                      name={["business", "tax_no_13"]} 
+                      label="เลขทะเบียน 13 หลัก"
+                      rules={[
+                        { pattern: /^[0-9]{13}$/, message: "เลขประจำตัวผู้เสียภาษีต้องเป็นตัวเลข 13 หลัก" }
+                      ]}
+                    >
                       <Input maxLength={13} placeholder="13 หลัก" />
                     </Form.Item>
 
@@ -1323,8 +1352,14 @@ export default function VendorListPage() {
                       <Form.Item name={["goods_shipping_address", "contact"]} label="ผู้ติดต่อ">
                         <Input placeholder="ชื่อผู้ติดต่อรับสินค้า" />
                       </Form.Item>
-                      <Form.Item name={["goods_shipping_address", "phone"]} label="เบอร์โทรศัพท์">
-                        <Input placeholder="เบอร์โทรศัพท์สำหรับติดต่อรับของ" />
+                      <Form.Item 
+                        name={["goods_shipping_address", "phone"]} 
+                        label="เบอร์โทรศัพท์"
+                        rules={[
+                          { pattern: /^[0-9]{9,10}$/, message: "เบอร์โทรศัพท์ต้องเป็นตัวเลข 9-10 หลัก" }
+                        ]}
+                      >
+                        <Input maxLength={10} placeholder="เบอร์โทรศัพท์สำหรับติดต่อรับของ" />
                       </Form.Item>
                       <Form.Item className="md:col-span-2" name={["goods_shipping_address", "address"]} label="ที่อยู่">
                         <Input.TextArea rows={3} placeholder="บ้านเลขที่ ซอย ถนน อาคาร ห้องเลขที่ ฯลฯ" />
@@ -1353,11 +1388,23 @@ export default function VendorListPage() {
                 children: (
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Form.Item name={["contact_channels", "email"]} label="อีเมล">
+                      <Form.Item 
+                        name={["contact_channels", "email"]} 
+                        label="อีเมล"
+                        rules={[
+                          { type: "email", message: "รูปแบบอีเมลไม่ถูกต้อง" }
+                        ]}
+                      >
                         <Input placeholder="email@domain.com" />
                       </Form.Item>
-                      <Form.Item name={["contact_channels", "phone"]} label="เบอร์โทร">
-                        <Input placeholder="09x-xxx-xxxx" />
+                      <Form.Item 
+                        name={["contact_channels", "phone"]} 
+                        label="เบอร์โทร"
+                        rules={[
+                          { pattern: /^[0-9]{9,10}$/, message: "เบอร์โทรต้องเป็นตัวเลข 9-10 หลัก" }
+                        ]}
+                      >
+                        <Input maxLength={10} placeholder="09x-xxx-xxxx" />
                       </Form.Item>
                       <Form.Item name={["contact_channels", "website"]} label="เว็บไซต์">
                         <Input placeholder="www.website.com" />
@@ -1579,12 +1626,24 @@ export default function VendorListPage() {
                                       <Input placeholder="ชื่อเล่น" />
                                     </Form.Item>
 
-                                    <Form.Item name={[f.name, "email"]} label="อีเมลล์">
+                                    <Form.Item 
+                                      name={[f.name, "email"]} 
+                                      label="อีเมลล์"
+                                      rules={[
+                                        { type: "email", message: "รูปแบบอีเมลไม่ถูกต้อง" }
+                                      ]}
+                                    >
                                       <Input placeholder="example@email.com" />
                                     </Form.Item>
 
-                                    <Form.Item name={[f.name, "phone"]} label="เบอร์โทร">
-                                      <Input placeholder="09x-xxx-xxxx" />
+                                    <Form.Item 
+                                      name={[f.name, "phone"]} 
+                                      label="เบอร์โทร"
+                                      rules={[
+                                        { pattern: /^[0-9]{9,10}$/, message: "เบอร์โทรต้องเป็นตัวเลข 9-10 หลัก" }
+                                      ]}
+                                    >
+                                      <Input maxLength={10} placeholder="09x-xxx-xxxx" />
                                     </Form.Item>
 
                                     <Form.Item name={[f.name, "position"]} label="ตำแหน่งงาน">

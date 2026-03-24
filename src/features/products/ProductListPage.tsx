@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Button,
   Card,
@@ -13,6 +14,7 @@ import {
   Typography,
   message,
 } from "antd";
+import type { TableProps } from "antd/es/table";
 import { PlusOutlined, ReloadOutlined, EditOutlined } from "@ant-design/icons";
 import {
   createProduct,
@@ -36,42 +38,39 @@ type FormValues = {
 
 export default function ProductListPage() {
   const canManage = hasPermission("master.product.manage");
+  const queryClient = useQueryClient();
+  const QUERY_KEY = ["products"];
 
-  const [loading, setLoading] = useState(false);
-  const [rows, setRows] = useState<ProductRow[]>([]);
   const [q, setQ] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [sortKey, setSortKey] = useState<string>("id");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ProductRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm<FormValues>();
 
-  async function load() {
-    setLoading(true);
-    try {
-      const r = await listProducts();
-      setRows(r);
-    } catch (e: any) {
-      message.error(e?.response?.data?.message || "โหลดสินค้าไม่สำเร็จ", 2);
-    } finally {
-      setLoading(false);
-    }
-  }
-
+  // Debounce search
   useEffect(() => {
-    if (canManage) load();
-  }, []);
+    const handler = setTimeout(() => {
+      setSearchQuery(q);
+      setPage(1);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [q]);
 
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return rows;
-    return rows.filter((r) => {
-      return (
-        r.code.toLowerCase().includes(needle) ||
-        r.name.toLowerCase().includes(needle)
-      );
-    });
-  }, [rows, q]);
+  // Fetch Data using React Query
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: [...QUERY_KEY, searchQuery, page, pageSize, sortKey, sortOrder],
+    queryFn: () => listProducts({ q: searchQuery, page, limit: pageSize, sortKey, sortOrder }),
+    enabled: !!canManage,
+  });
+
+  const rows = data?.rows || [];
+  const total = data?.total || 0;
 
   function openCreate() {
     setEditing(null);
@@ -117,8 +116,8 @@ export default function ProductListPage() {
         message.success("เพิ่มสินค้าแล้ว", 1.2);
       }
 
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
       setOpen(false);
-      await load();
     } catch (e: any) {
       message.error(e?.response?.data?.message || "บันทึกไม่สำเร็จ", 2);
     } finally {
@@ -130,24 +129,39 @@ export default function ProductListPage() {
     try {
       await setProductActive(row.id, next ? 1 : 0);
       message.success("อัปเดตสถานะแล้ว", 1.2);
-      await load();
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
     } catch (e: any) {
       message.error(e?.response?.data?.message || "อัปเดตสถานะไม่สำเร็จ", 2);
     }
   }
 
+  const onTableChange: TableProps<ProductRow>["onChange"] = (pagination, _filters, sorter) => {
+    setPage(pagination.current || 1);
+    setPageSize(pagination.pageSize || 20);
+
+    if (Array.isArray(sorter)) return;
+    const field = sorter.field as string;
+    const order = sorter.order;
+
+    if (field && order) {
+      setSortKey(field);
+      setSortOrder(order === "ascend" ? "asc" : "desc");
+    } else {
+      setSortKey("id");
+      setSortOrder("desc");
+    }
+  };
+
   const columns = [
     {
       title: "รหัสสินค้า",
       dataIndex: "code",
-      sorter: (a: ProductRow, b: ProductRow) =>
-        a.code.localeCompare(b.code),
+      sorter: true,
     },
     {
       title: "ชื่อสินค้า",
       dataIndex: "name",
-      sorter: (a: ProductRow, b: ProductRow) =>
-        a.name.localeCompare(b.name),
+      sorter: true,
       render: (v: any, r: ProductRow) => (
         <div>
           <div className="font-medium">{v}</div>
@@ -161,29 +175,20 @@ export default function ProductListPage() {
       title: "ราคาขาย",
       dataIndex: "sell_price",
       align: "right" as const,
-      sorter: (a: ProductRow, b: ProductRow) =>
-        a.sell_price - b.sell_price,
+      sorter: true,
       render: (v: number) => v.toLocaleString(),
     },
     {
       title: "VAT",
       dataIndex: "is_vat",
-      filters: [
-        { text: "มี VAT", value: 1 },
-        { text: "ไม่มี VAT", value: 0 },
-      ],
-      onFilter: (v: any, r: ProductRow) => r.is_vat === v,
+      sorter: true,
       render: (v: number) =>
         v === 1 ? <Tag color="green">VAT</Tag> : <Tag>NO VAT</Tag>,
     },
     {
       title: "สถานะ",
       dataIndex: "is_active",
-      filters: [
-        { text: "Active", value: 1 },
-        { text: "Inactive", value: 0 },
-      ],
-      onFilter: (v: any, r: ProductRow) => r.is_active === v,
+      sorter: true,
       render: (_: any, r: ProductRow) => {
         const active = r.is_active === 1;
         return (
@@ -238,8 +243,9 @@ export default function ProductListPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             allowClear
+            style={{ width: 240 }}
           />
-          <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
+          <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isLoading}>
             Refresh
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
@@ -251,10 +257,17 @@ export default function ProductListPage() {
       <Card>
         <Table
           rowKey="id"
-          loading={loading}
+          loading={isLoading}
           columns={columns as any}
-          dataSource={filtered}
-          pagination={{ pageSize: 10 }}
+          dataSource={rows}
+          onChange={onTableChange}
+          pagination={{
+            current: page,
+            pageSize,
+            total,
+            showSizeChanger: true,
+            pageSizeOptions: [10, 20, 50, 100],
+          }}
         />
       </Card>
 

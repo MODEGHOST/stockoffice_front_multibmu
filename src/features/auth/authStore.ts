@@ -41,12 +41,14 @@ export async function login(email: string, password: string): Promise<MeResponse
     const { data } = await api.post("/auth/login", { email, password });
     localStorage.setItem("accessToken", data.accessToken);
     localStorage.setItem("refreshToken", data.refreshToken);
+    localStorage.removeItem("switchCompanyId");
     _me = await me();
     emit();
     return _me;
   } catch (e) {
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
+    localStorage.removeItem("switchCompanyId");
     _me = null;
     emit();
     throw e;
@@ -63,6 +65,7 @@ export async function me(): Promise<MeResponse> {
 export function logout() {
   localStorage.removeItem("accessToken");
   localStorage.removeItem("refreshToken");
+  localStorage.removeItem("switchCompanyId");
   _me = null;
   emit();
 }

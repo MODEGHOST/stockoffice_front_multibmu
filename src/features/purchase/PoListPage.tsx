@@ -3,6 +3,7 @@ import { Button, Card, Input, Select, Space, Table, Tag, Typography, message } f
 import type { ColumnsType, TableProps } from "antd/es/table";
 import { useNavigate } from "react-router-dom";
 import { listPo, type PoListRow } from "./purchaseApi";
+import { useQuery } from "@tanstack/react-query";
 import { ReloadOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 
@@ -25,50 +26,43 @@ function daysLeft(expected_date?: string | null) {
 
 export default function PoListPage() {
   const nav = useNavigate();
+  const QUERY_KEY = ["purchase-orders"];
 
   const [q, setQ] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [status, setStatus] = useState<"" | PoListRow["status"]>("");
-  const [loading, setLoading] = useState(false);
 
-  const [rows, setRows] = useState<PoListRow[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [total, setTotal] = useState(0);
 
-  // sort (client -> server optional)
   const [sortKey, setSortKey] = useState<"" | "po_no" | "vendor_name" | "warehouse_name" | "status" | "issue_date" | "expected_date" | "days_left">("");
   const [sortOrder, setSortOrder] = useState<"" | "asc" | "desc">("");
 
-  const params = useMemo(
-    () => ({
-      q: q.trim(),
-      status,
-      page,
-      pageSize,
-      // ถ้า backend รองรับ sort ส่งไปได้เลย (ไม่รองรับก็ไม่เป็นไร)
-      sortKey: sortKey || undefined,
-      sortOrder: sortOrder || undefined,
-    }),
-    [q, status, page, pageSize, sortKey, sortOrder],
-  );
-
-  async function load() {
-    try {
-      setLoading(true);
-      const r = await listPo(params as any);
-      setRows(Array.isArray(r?.rows) ? r.rows : []);
-      setTotal(Number(r?.total || 0));
-    } catch (e: any) {
-      message.error(e?.response?.data?.message || "โหลดรายการ PO ไม่สำเร็จ", 2);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.q, params.status, params.page, params.pageSize, params.sortKey, params.sortOrder]);
+    const handler = setTimeout(() => {
+      setSearchQuery(q);
+      setPage(1);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [q]);
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: [...QUERY_KEY, searchQuery, status, page, pageSize, sortKey, sortOrder],
+    queryFn: async () => {
+      const p: Record<string, any> = {
+        q: searchQuery.trim(),
+        status,
+        page,
+        pageSize,
+        sortKey: sortKey || undefined,
+        sortOrder: sortOrder || undefined,
+      };
+      return await listPo(p as any);
+    },
+  });
+
+  const rows = Array.isArray(data?.rows) ? data.rows : [];
+  const total = Number(data?.total || 0);
 
   const columns: ColumnsType<PoListRow> = [
     {
@@ -207,7 +201,7 @@ export default function PoListPage() {
         </div>
 
         <Space>
-          <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
+          <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isLoading}>
             Refresh
           </Button>
           <Button type="primary" onClick={() => nav("/purchase/po/new")}>สร้าง PO</Button>
@@ -221,7 +215,6 @@ export default function PoListPage() {
             value={q}
             onChange={(e) => {
               setQ(e.target.value);
-              setPage(1);
             }}
             allowClear
             style={{ width: 340 }}
@@ -247,10 +240,11 @@ export default function PoListPage() {
       <Card>
         <Table
           rowKey="id"
-          loading={loading}
+          loading={isLoading}
           columns={columns}
           dataSource={rows}
           onChange={onTableChange}
+          scroll={{ x: 'max-content' }}
           pagination={{
             current: page,
             pageSize,
