@@ -4,7 +4,7 @@ import {
   Space, Modal, message, Row, Col, Divider, Switch, Result 
 } from "antd";
 import { PlusCircleOutlined, MinusCircleOutlined, DeleteOutlined, ScanOutlined, DollarOutlined, CheckCircleOutlined } from "@ant-design/icons";
-import { Html5QrcodeScanner } from "html5-qrcode";
+import { Html5Qrcode } from "html5-qrcode";
 import dayjs from "dayjs";
 import { useNavigate } from "react-router-dom";
 import api from "../../lib/api";
@@ -26,7 +26,7 @@ type CartItem = {
 
 export default function ScanToSalePage() {
   const nav = useNavigate();
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
   
   const [form] = Form.useForm();
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -57,7 +57,7 @@ export default function ScanToSalePage() {
       ]);
       setWarehouses(Array.isArray(whRes.data?.warehouses) ? whRes.data.warehouses : (Array.isArray(whRes.data) ? whRes.data : []));
       
-      const vends = Array.isArray(custRes.data) ? custRes.data : [];
+      const vends = Array.isArray(custRes.data?.rows) ? custRes.data.rows : (Array.isArray(custRes.data) ? custRes.data : []);
       setCustomers(vends.filter((v: any) => v.type === "CUSTOMER" || v.type === "BOTH"));
 
       const fins = Array.isArray(finRes.data?.rows) ? finRes.data.rows : (Array.isArray(finRes.data) ? finRes.data : []);
@@ -68,32 +68,46 @@ export default function ScanToSalePage() {
     }
   }
 
-  // --- HTML5 QR Scanner ---
+  // ทำลายกล้องเมื่อออกจากหน้า
   useEffect(() => {
-    if (scanning) {
-      scannerRef.current = new Html5QrcodeScanner(
-        "reader",
-        { fps: 10, qrbox: { width: 250, height: 250 }, rememberLastUsedCamera: true },
-         /* verbose= */ false
-      );
-      
-      scannerRef.current.render(
-        (decodedText) => handleScanSuccess(decodedText),
-        (error) => { /* ignore normal errors */ }
-      );
-    } else {
-      if (scannerRef.current) {
-        scannerRef.current.clear().catch(e => console.error(e));
-        scannerRef.current = null;
-      }
-    }
-    
     return () => {
       if (scannerRef.current) {
-        scannerRef.current.clear().catch(e => console.error(e));
+        scannerRef.current.stop().catch(e => console.error(e));
       }
     };
-  }, [scanning]);
+  }, []);
+
+  async function startCamera() {
+    if (!warehouseId) {
+      message.warning("กรุณาเลือกสาขา/คลังก่อนที่จะเปิดกล้อง");
+      return;
+    }
+    try {
+      const html5QrCode = new Html5Qrcode("reader");
+      scannerRef.current = html5QrCode;
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        handleScanSuccess,
+        undefined
+      );
+      setScanning(true);
+    } catch (err: any) {
+      message.error("ไม่สามารถเปิดกล้องได้: " + (err?.message || "กรุณาตรวจสอบสิทธิ์การเข้าถึงกล้องเบราว์เซอร์"));
+      setScanning(false);
+    }
+  }
+
+  function stopCamera() {
+    if (scannerRef.current) {
+      scannerRef.current.stop().then(() => {
+        scannerRef.current?.clear();
+        setScanning(false);
+      }).catch(() => setScanning(false));
+    } else {
+      setScanning(false);
+    }
+  }
 
   // สแกนเจอ
   async function handleScanSuccess(text: string) {
@@ -290,7 +304,7 @@ export default function ScanToSalePage() {
     <div className="p-4 space-y-4 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-2">
         <div>
-          <Title level={3} className="!mb-0"><ScanOutlined className="mr-2"/>POS สแกนจ่าย (iPad)</Title>
+          <Title level={3} className="!mb-0"><ScanOutlined className="mr-2"/>สแกน</Title>
           <Text type="secondary">ระบบยิงบาร์โค้ดขายและตัดสต๊อกฉับไว</Text>
         </div>
       </div>
@@ -320,9 +334,9 @@ export default function ScanToSalePage() {
           >
             <div className="text-center mb-4">
                {scanning ? (
-                 <Button danger block onClick={() => setScanning(false)}>ปิดกล้อง</Button>
+                 <Button danger block onClick={stopCamera}>ปิดกล้อง</Button>
                ) : (
-                 <Button type="primary" block disabled={!warehouseId} onClick={() => setScanning(true)}>
+                 <Button type="primary" block disabled={!warehouseId} onClick={startCamera}>
                     เปิดกล้องสแกน (รันค้างไว้ได้เลย)
                  </Button>
                )}
