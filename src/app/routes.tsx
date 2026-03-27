@@ -20,6 +20,7 @@ const Loadable = (Component: React.LazyExoticComponent<any>) => (props: any) => 
 
 const LoginPage = Loadable(lazy(() => import("../features/auth/LoginPage")));
 const DashboardPage = Loadable(lazy(() => import("../features/dashboard/DashboardPage")));
+const ProductScanPage = Loadable(lazy(() => import("../features/products/ProductScanPage")));
 
 const ProductListPage = Loadable(lazy(() => import("../features/products/ProductListPage")));
 const WarehouseListPage = Loadable(lazy(() => import("../features/warehouses/WarehouseListPage")));
@@ -39,6 +40,8 @@ const PoDetailPage = Loadable(lazy(() => import("../features/purchase/PoDetailPa
 const BillListPage = Loadable(lazy(() => import("../features/purchase/BillListPage")));
 const BillCreatePage = Loadable(lazy(() => import("../features/purchase/BillCreatePage")));
 const BillDetailPage = Loadable(lazy(() => import("../features/purchase/BillDetailPage")));
+
+const ScanToSalePage = Loadable(lazy(() => import("../features/sales/ScanToSalePage")));
 
 const InvoiceListPage = Loadable(lazy(() => import("../features/sales/InvoiceListPage")));
 const InvoiceCreatePage = Loadable(lazy(() => import("../features/sales/InvoiceCreatePage")));
@@ -74,6 +77,7 @@ const ReportsDashboard = Loadable(lazy(() => import("../features/reports/Reports
 const FinanceAccountsPage = Loadable(lazy(() => import("../features/finance/FinanceAccountsPage")));
 
 export const router = createBrowserRouter([
+  { path: "/p/:hash", element: <ProductScanPage /> },
   { path: "/login", element: <LoginPage /> },
 
   {
@@ -105,6 +109,7 @@ export const router = createBrowserRouter([
           { path: "purchase/bill/new", element: <BillCreatePage /> },
           { path: "purchase/bill/:id", element: <BillDetailPage /> },
 
+          { path: "sales/scanner", element: <ScanToSalePage /> },
           { path: "sales/quotation", element: <QuotationListPage /> },
           { path: "sales/invoice", element: <InvoiceListPage /> },
           { path: "sales/delivery-note", element: <DeliveryNoteListPage /> },

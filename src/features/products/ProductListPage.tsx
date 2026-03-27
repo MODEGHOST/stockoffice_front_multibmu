@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Button,
@@ -15,7 +15,9 @@ import {
   message,
 } from "antd";
 import type { TableProps } from "antd/es/table";
-import { PlusOutlined, ReloadOutlined, EditOutlined } from "@ant-design/icons";
+import { PlusOutlined, ReloadOutlined, EditOutlined, QrcodeOutlined, PrinterOutlined } from "@ant-design/icons";
+import { useReactToPrint } from "react-to-print";
+import { ProductQRCodePrint } from "./ProductQRCodePrint";
 import {
   createProduct,
   listProducts,
@@ -52,6 +54,14 @@ export default function ProductListPage() {
   const [editing, setEditing] = useState<ProductRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm<FormValues>();
+
+  const [printRow, setPrintRow] = useState<ProductRow | null>(null);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const printComponentRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({
+    contentRef: printComponentRef,
+    documentTitle: printRow ? `QR_${printRow.code}` : "QRCode",
+  });
 
   // Debounce search
   useEffect(() => {
@@ -207,15 +217,27 @@ export default function ProductListPage() {
       },
     },
     {
-      title: "",
+      title: "จัดการ",
       render: (_: any, r: ProductRow) => (
-        <Button
-          icon={<EditOutlined />}
-          onClick={() => openEdit(r)}
-          disabled={!canManage}
-        >
-          แก้ไข
-        </Button>
+        <Space>
+          <Button
+            type="dashed"
+            icon={<QrcodeOutlined />}
+            onClick={() => {
+              setPrintRow(r);
+              setPrintModalOpen(true);
+            }}
+          >
+            พิมพ์ QR
+          </Button>
+          <Button
+            icon={<EditOutlined />}
+            onClick={() => openEdit(r)}
+            disabled={!canManage}
+          >
+            แก้ไข
+          </Button>
+        </Space>
       ),
     },
   ];
@@ -305,6 +327,35 @@ export default function ProductListPage() {
             <Switch checkedChildren="Active" unCheckedChildren="Inactive" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        open={printModalOpen}
+        title={`พิมพ์สติ๊กเกอร์ QR Code: ${printRow?.code}`}
+        onCancel={() => setPrintModalOpen(false)}
+        footer={[
+          <Button key="close" onClick={() => setPrintModalOpen(false)}>
+            ปิด
+          </Button>,
+          <Button
+            key="print"
+            type="primary"
+            icon={<PrinterOutlined />}
+            onClick={() => handlePrint()}
+          >
+            สั่งพิมพ์ (Print)
+          </Button>,
+        ]}
+        centered
+        width={600}
+      >
+        <div className="bg-gray-100 p-8 rounded-lg flex items-center justify-center">
+          {printRow && (
+            <div className="shadow-lg bg-white">
+              <ProductQRCodePrint product={printRow as any} ref={printComponentRef} />
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   );

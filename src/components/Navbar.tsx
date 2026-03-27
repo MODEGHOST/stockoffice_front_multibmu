@@ -38,6 +38,7 @@ export default function Navbar() {
   ].filter(Boolean);
 
   const salesChildren = [
+    hasPermission("sales.inv.manage") ? { key: "/sales/scanner", label: "สแกนขาย (POS)" } : null,
     hasPermission("sales.inv.manage") ? { key: "/sales/quotation", label: "ใบเสนอราคา (QT)" } : null,
     hasPermission("sales.inv.manage") ? { key: "/sales/invoice", label: "ใบแจ้งหนี้ (IV)" } : null,
     hasPermission("sales.inv.manage") ? { key: "/sales/billing-notes", label: "ใบวางบิล (BL)" } : null,

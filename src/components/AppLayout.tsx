@@ -27,7 +27,7 @@ export default function AppLayout() {
   const UNCLICKABLE = ["purchase", "sales", "stock", "admin"];
   const THAI_MAP: Record<string, string> = {
     purchase: "จัดซื้อ", po: "ใบสั่งซื้อ", grn: "รับสินค้า", bill: "บิลซื้อ",
-    sales: "ขาย", quotation: "ใบเสนอราคา", invoice: "ใบแจ้งหนี้", "delivery-note": "ใบส่งของ", receipt: "ใบเสร็จ", "billing-notes": "ใบวางบิล",
+    sales: "ขาย", scanner: "สแกนขาย (POS)", quotation: "ใบเสนอราคา", invoice: "ใบแจ้งหนี้", "delivery-note": "ใบส่งของ", receipt: "ใบเสร็จ", "billing-notes": "ใบวางบิล",
     admin: "ผู้ดูแลระบบ", users: "ผู้ใช้งาน", roles: "ตำแหน่ง", settings: "ตั้งค่า", companies: "สาขา/บริษัท", commissions: "ค่าคอมมิชชั่น", logs: "ประวัติการใช้งาน",
     stock: "คลังสินค้า", adjustments: "ปรับปรุงสต๊อก", transfers: "โอนย้าย", counts: "ตรวจนับ", "company": "ภาพรวม",
     products: "สินค้า", warehouses: "คลัง", vendors: "ผู้จำหน่าย", finance: "การเงิน", new: "สร้างใหม่",
