@@ -13,6 +13,8 @@ import {
   Tag,
   Typography,
   message,
+  Row,
+  Col,
 } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import dayjs from "dayjs";
@@ -494,34 +496,117 @@ export default function InvoiceDetailPage() {
              <div className="font-semibold text-base mb-3">รายการสินค้า</div>
              <Divider className="!my-3" />
              <div className="space-y-3">
-                 {computedLines.map((line, idx) => (
-                    <div key={line.key} className="border rounded-lg p-3">
-                        <div className="flex items-center justify-between gap-2">
-                           <div className="font-medium">รายการที่ {idx + 1}</div>
-                           <div className="text-xs text-gray-500">{line.product_label}</div>
-                        </div>
+                 {computedLines.map((line, idx) => {
+                   const vatUiStr = line.vat_mode === "NONE" ? "ไม่มี VAT" : line.vat_mode === "EXCL" && line.vat_rate === 0 ? "VAT 0%" : line.vat_mode === "INCL" ? "รวมภาษี 7%" : "แยกภาษี 7%";
+                   const commModeStr = line.commission_mode === "PERCENT" ? "เปอร์เซ็นต์" : "จำนวนเงิน";
 
-                        {/* Detail Row */}
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mt-3">
-                            <div className="md:col-span-4">
-                               <div className="text-xs text-gray-500 mb-1">สินค้า</div>
-                               <Input value={line.product_label} disabled />
-                            </div>
-                             <div className="md:col-span-2">
-                               <div className="text-xs text-gray-500 mb-1">จำนวน</div>
-                               <InputNumber value={line.quantity} disabled className="w-full" />
-                            </div>
-                            <div className="md:col-span-3">
-                               <div className="text-xs text-gray-500 mb-1">ราคา/หน่วย</div>
-                               <InputNumber value={line.price} disabled className="w-full" />
-                            </div>
-                            <div className="md:col-span-3">
-                               <div className="text-xs text-gray-500 mb-1">รวม</div>
-                               <Input value={fmt(line.total)} disabled />
-                            </div>
-                        </div>
+                   return (
+                    <div key={line.key} className="border rounded-lg p-3 bg-white">
+                        <div className="font-medium mb-3 text-gray-700">รายการที่ {idx + 1}</div>
+
+                        {/* Row 1 */}
+                        <Row gutter={[16, 16]}>
+                          <Col xs={24} lg={12} xl={11}>
+                            <div className="text-xs text-gray-500 mb-1">สินค้า</div>
+                            <Input value={line.product_label} readOnly />
+                          </Col>
+                          <Col xs={12} lg={4} xl={4}>
+                            <div className="text-xs text-gray-500 mb-1">คงเหลือ</div>
+                            <Input value="-" disabled />
+                          </Col>
+                          <Col xs={12} lg={4} xl={4}>
+                            <div className="text-xs text-gray-500 mb-1">จำนวน</div>
+                            <InputNumber value={line.quantity} readOnly className="w-full" />
+                          </Col>
+                          <Col xs={12} lg={4} xl={5}>
+                            <div className="text-xs text-gray-500 mb-1">ราคา/หน่วย</div>
+                            <InputNumber value={line.price} readOnly className="w-full" />
+                          </Col>
+                        </Row>
+
+                        <Divider className="!my-4" />
+
+                        {/* Row 2 */}
+                        <Row gutter={[16, 16]} align="middle">
+                          <Col xs={24} xl={16}>
+                            <Row gutter={[16, 16]}>
+                              <Col xs={12} md={6}>
+                                <div className="text-xs text-gray-500 mb-1">ส่วนลด (%)</div>
+                                <InputNumber value={line.discount_percent} readOnly className="w-full" />
+                              </Col>
+                              <Col xs={12} md={6}>
+                                <div className="text-xs text-gray-500 mb-1">ส่วนลดบาท</div>
+                                <InputNumber value={line.discount_amount} readOnly className="w-full" />
+                              </Col>
+                              <Col xs={24} md={12}>
+                                <div className="text-xs text-gray-500 mb-1">ประเภทภาษี</div>
+                                <Input value={vatUiStr} readOnly className="w-full" />
+                              </Col>
+                            </Row>
+                          </Col>
+                          <Col xs={24} xl={8}>
+                            <Row gutter={[16, 16]}>
+                              <Col xs={12}>
+                                <div className="text-xs text-gray-500 mb-1">ก่อนภาษี</div>
+                                <Input value={fmt(line.amount_before_vat || 0)} readOnly />
+                              </Col>
+                              <Col xs={12}>
+                                <div className="text-xs text-gray-500 mb-1">มูลค่ารวม</div>
+                                <Input value={fmt(line.total || 0)} readOnly />
+                              </Col>
+                            </Row>
+                          </Col>
+                        </Row>
+
+                        <Divider className="!my-4" />
+
+                        {/* Row 3 */}
+                        <Row gutter={[16, 16]}>
+                          <Col xs={24}>
+                            <Row gutter={[16, 16]}>
+                              <Col xs={24} md={8}>
+                                <div className="text-xs text-gray-500 mb-1">ประเภทคอม</div>
+                                <Input value={commModeStr} readOnly className="w-full" />
+                              </Col>
+                              <Col xs={24} md={16}>
+                                <div className="text-xs text-gray-500 mb-1">ตั้งค่า % / เงิน</div>
+                                <InputNumber 
+                                  value={line.commission_value} 
+                                  readOnly 
+                                  addonAfter={line.commission_mode === "PERCENT" ? "%" : "บาท"} 
+                                  className="w-full" 
+                                />
+                              </Col>
+                            </Row>
+                          </Col>
+                        </Row>
+
+                        <Row gutter={[16, 16]} className="mt-3">
+                          <Col xs={24}>
+                            <Row gutter={[16, 16]}>
+                              <Col xs={12} md={6}>
+                                <div className="text-xs text-gray-500 mb-1">คอม/หน่วย</div>
+                                <Input value={fmt(line.commission_per_unit || 0)} readOnly />
+                              </Col>
+                              <Col xs={12} md={6}>
+                                <div className="text-xs text-gray-500 mb-1">คอมรวม</div>
+                                <Input value={fmt(line.commission_total || 0)} readOnly />
+                              </Col>
+                              <Col xs={12} md={6}>
+                                <div className="text-xs text-gray-500 mb-1">หัก ณ (%)</div>
+                                <InputNumber value={line.withholding_rate} readOnly className="w-full" />
+                              </Col>
+                              <Col xs={12} md={6}>
+                                <div className="text-xs text-gray-500 mb-1">หัก ณ (บาท)</div>
+                                <Input value={fmt(line.withholding_amount || 0)} readOnly />
+                              </Col>
+                            </Row>
+                          </Col>
+                        </Row>
+
                     </div>
-                 ))}
+                 );
+                 })}
                  {!computedLines.length && <div className="text-gray-500">ไม่มีรายการสินค้า</div>}
              </div>
          </Card>

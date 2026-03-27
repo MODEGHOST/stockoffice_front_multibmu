@@ -3,34 +3,64 @@ import {
   Card, Button, Form, Select, Typography, Table, InputNumber, 
   Space, Modal, message, Row, Col, Divider, Switch, Result 
 } from "antd";
-import { PlusCircleOutlined, MinusCircleOutlined, DeleteOutlined, ScanOutlined, DollarOutlined, CheckCircleOutlined } from "@ant-design/icons";
+import { PlusCircleOutlined, MinusCircleOutlined, DeleteOutlined, ScanOutlined, DollarOutlined, CheckCircleOutlined, SettingOutlined } from "@ant-design/icons";
 import { Html5Qrcode } from "html5-qrcode";
 import dayjs from "dayjs";
 import { useNavigate } from "react-router-dom";
 import api from "../../lib/api";
+import { type Line, recalcLine, calcTotals, fmt } from "./invoiceCalc";
 
 const { Title, Text } = Typography;
 
 type Option = { value: number; label: string };
 
-type CartItem = {
-  key: string;
-  product_id: number;
+type CartItem = Line & {
   code: string;
   name: string;
-  quantity: number;
-  price: number;
-  maxQty: number; // เอามาจาก stock
-  commission_value: number; // บาทต่อชิ้น
+  maxQty: number;
 };
+
+let scanAudioCtx: AudioContext | null = null;
+const initAudio = () => {
+    if (!scanAudioCtx) {
+       const ACtx = window.AudioContext || (window as any).webkitAudioContext;
+       if (ACtx) scanAudioCtx = new ACtx();
+    }
+}
+
+const playLoudBeep = () => {
+    try {
+        if (!scanAudioCtx) initAudio();
+        if (scanAudioCtx && scanAudioCtx.state === 'suspended') {
+            scanAudioCtx.resume();
+        }
+        if (!scanAudioCtx) return;
+        
+        const osc = scanAudioCtx.createOscillator();
+        const gain = scanAudioCtx.createGain();
+        gain.gain.value = 1.0; 
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(1500, scanAudioCtx.currentTime);
+        osc.connect(gain);
+        gain.connect(scanAudioCtx.destination);
+        osc.start();
+        setTimeout(() => {
+            osc.stop();
+            osc.disconnect();
+        }, 150);
+    } catch(e) {}
+}
 
 export default function ScanToSalePage() {
   const nav = useNavigate();
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const processingRef = useRef(false);
   
   const [form] = Form.useForm();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [scanning, setScanning] = useState(false);
+  const [editingLineKey, setEditingLineKey] = useState<string | null>(null);
+  const editingLine = useMemo(() => cart.find(c => c.key === editingLineKey), [cart, editingLineKey]);
   
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
@@ -78,6 +108,7 @@ export default function ScanToSalePage() {
   }, []);
 
   async function startCamera() {
+    initAudio(); // ปลดล็อก Audio บน Safari ตอนเปิดกล้อง
     if (!warehouseId) {
       message.warning("กรุณาเลือกสาขา/คลังก่อนที่จะเปิดกล้อง");
       return;
@@ -115,12 +146,10 @@ export default function ScanToSalePage() {
       message.warning("กรุณาเลือกคลังสินค้าก่อนสแกน!", 2);
       return;
     }
+    if (processingRef.current) return;
+    processingRef.current = true;
 
     try {
-      // pause scanner briefly to prevent dual scanning
-      if (scannerRef.current) {
-        scannerRef.current.pause(true);
-      }
 
       // วิเคราะห์ข้อความสแกน ว่าเป็น URL (/p/:hash) หรือเป็น Product Code ปกติ
       let fetchUrl = "";
@@ -153,26 +182,40 @@ export default function ScanToSalePage() {
         const existIdx = prev.findIndex(c => c.product_id === product.id);
         if (existIdx >= 0) {
           const next = [...prev];
-          const currQty = next[existIdx].quantity;
+          const currQty = next[existIdx].quantity || 0;
           if (currQty + 1 > product.maxQty) {
             message.warning(`สินค้า ${product.name} มีสต๊อกจำกัดแค่ ${product.maxQty}`);
             return prev;
           }
-          next[existIdx] = { ...next[existIdx], quantity: currQty + 1 };
+          const updated = recalcLine({ ...next[existIdx], quantity: currQty + 1 }) as CartItem;
+          updated.code = next[existIdx].code;
+          updated.name = next[existIdx].name;
+          updated.maxQty = next[existIdx].maxQty;
+          next[existIdx] = updated;
           message.success(`เพิ่ม ${product.name} (+1)`, 1);
+          playLoudBeep();
           return next;
         } else {
            message.success(`สแกนเจอ ${product.name} เรียบร้อย`, 1);
-           return [...prev, {
+           playLoudBeep();
+           const newLine = recalcLine({
              key: String(Date.now()),
              product_id: product.id,
-             code: product.code,
-             name: product.name,
+             product_label: product.name,
              quantity: 1,
              price: product.price || 0,
-             maxQty: product.maxQty,
-             commission_value: 0
-           }];
+             discount_percent: 0,
+             discount_amount: 0,
+             vat_mode: "EXCL",
+             vat_rate: 7,
+             commission_mode: "PERCENT",
+             commission_value: 0,
+             withholding_rate: 0
+           }) as CartItem;
+           newLine.code = product.code;
+           newLine.name = product.name;
+           newLine.maxQty = product.maxQty;
+           return [...prev, newLine];
         }
       });
 
@@ -180,10 +223,8 @@ export default function ScanToSalePage() {
       message.error("รหัสบาร์โค้ดไม่ถูกต้อง หรือหาสินค้าไม่พบ");
     } finally {
       setTimeout(() => {
-        if (scannerRef.current && scanning) {
-          scannerRef.current.resume();
-        }
-      }, 1500); // 1.5 วินาที cooldown
+        processingRef.current = false;
+      }, 2000); // 2 วินาที cooldown (ช่วงเลื่อนสินค้าออกไป)
     }
   }
 
@@ -223,11 +264,8 @@ export default function ScanToSalePage() {
   }
 
   // คำนวณยอดรวม
-  const totals = useMemo(() => {
-    let sum = 0;
-    cart.forEach(c => sum += (c.quantity * c.price));
-    return sum;
-  }, [cart]);
+  const cartTotals = useMemo(() => calcTotals(cart), [cart]);
+  const totals = cartTotals.total;
 
   // ซับมิตเปิด IV
   async function handleSubmitCheckout(values: any) {
@@ -244,13 +282,16 @@ export default function ScanToSalePage() {
         stock_deducted_at: "INVOICE",
         items: cart.map(c => ({
           product_id: c.product_id,
-          quantity: c.quantity,
-          price: c.price,
-          commission_mode: "AMOUNT",
-          commission_value: c.commission_value,
-          total: c.quantity * c.price,
-          vat_mode: "EXCL", 
-          vat_rate: 7
+          quantity: c.quantity || 0,
+          price: c.price || 0,
+          commission_mode: c.commission_mode || "PERCENT",
+          commission_value: c.commission_value || 0,
+          total: c.total || ((c.quantity||0) * (c.price||0)),
+          vat_mode: c.vat_mode || "EXCL", 
+          vat_rate: c.vat_rate || 7,
+          discount_percent: c.discount_percent || 0,
+          discount_amount: c.discount_amount || 0,
+          withholding_rate: c.withholding_rate || 0
         }))
       };
 
@@ -366,14 +407,14 @@ export default function ScanToSalePage() {
                     render: (q, r) => (
                       <Space>
                         <Button size="small" icon={<MinusCircleOutlined />} 
-                          disabled={q <= 1} onClick={() => {
-                            setCart(prev => prev.map(c => c.key === r.key ? { ...c, quantity: c.quantity - 1 } : c));
+                          disabled={(q||1) <= 1} onClick={() => {
+                            setCart(prev => prev.map(c => c.key === r.key ? Object.assign(recalcLine({ ...c, quantity: (c.quantity||1) - 1 }), { code: c.code, name: c.name, maxQty: c.maxQty }) as CartItem : c));
                           }} 
                         />
                         <span className="font-bold w-6 text-center">{q}</span>
                         <Button size="small" icon={<PlusCircleOutlined />} 
-                           disabled={q >= r.maxQty} onClick={() => {
-                            setCart(prev => prev.map(c => c.key === r.key ? { ...c, quantity: Math.min(r.maxQty, c.quantity + 1) } : c));
+                           disabled={(q||0) >= r.maxQty} onClick={() => {
+                            setCart(prev => prev.map(c => c.key === r.key ? Object.assign(recalcLine({ ...c, quantity: Math.min(r.maxQty, (c.quantity||0) + 1) }), { code: c.code, name: c.name, maxQty: c.maxQty }) as CartItem : c));
                           }} 
                         />
                       </Space>
@@ -383,7 +424,7 @@ export default function ScanToSalePage() {
                     title: "ราคาขาย/ชิ้น", dataIndex: "price", align: "right", width: 120,
                     render: (p, r) => (
                       <InputNumber min={0} value={p} className="w-full text-right"
-                         onChange={(v) => setCart(prev => prev.map(c => c.key === r.key ? { ...c, price: Number(v||0) } : c))}
+                         onChange={(v) => setCart(prev => prev.map(c => c.key === r.key ? Object.assign(recalcLine({ ...c, price: Number(v||0) }), { code: c.code, name: c.name, maxQty: c.maxQty }) as CartItem : c))}
                       />
                     )
                   },
@@ -391,17 +432,22 @@ export default function ScanToSalePage() {
                     title: "คอม/ชิ้น", dataIndex: "commission_value", align: "right", width: 100,
                     render: (c, r) => (
                       <InputNumber min={0} value={c} className="w-full text-right"
-                         onChange={(v) => setCart(prev => prev.map(x => x.key === r.key ? { ...x, commission_value: Number(v||0) } : x))}
+                         onChange={(v) => setCart(prev => prev.map(line => line.key === r.key ? Object.assign(recalcLine({ ...line, commission_value: Number(v||0) }), { code: line.code, name: line.name, maxQty: line.maxQty }) as CartItem : line))}
                       />
                     )
                   },
                   {
                     title: "รวม", align: "right", width: 100,
-                    render: (_, r) => <span className="font-bold text-indigo-600">{(r.quantity * r.price).toLocaleString()}</span>
+                    render: (_, r) => <span className="font-bold text-indigo-600">{fmt(r.total || 0)}</span>
                   },
                   {
-                    title: "", width: 60, align: "center",
-                    render: (_, r) => <Button danger type="text" icon={<DeleteOutlined />} onClick={() => setCart(prev => prev.filter(c => c.key !== r.key))} />
+                    title: "", width: 90, align: "center",
+                    render: (_, r) => (
+                      <Space size="small">
+                         <Button type="text" icon={<SettingOutlined className="text-gray-500" />} onClick={() => setEditingLineKey(r.key)} />
+                         <Button danger type="text" icon={<DeleteOutlined />} onClick={() => setCart(prev => prev.filter(c => c.key !== r.key))} />
+                      </Space>
+                    )
                   }
                 ]}
               />
@@ -483,6 +529,89 @@ export default function ScanToSalePage() {
            </Button>
         </div>
       </Modal>
+
+      {/* Line Settings Modal */}
+      <Modal
+         title={`ตั้งค่ารายการ: ${editingLine?.name || ""}`}
+         open={!!editingLineKey}
+         onCancel={() => setEditingLineKey(null)}
+         footer={[
+            <Button key="ok" type="primary" onClick={() => setEditingLineKey(null)}>ตกลง / ปิด</Button>
+         ]}
+         centered
+      >
+         {editingLine && (
+            <div className="space-y-4 pt-2">
+               <Row gutter={16}>
+                  <Col span={12}>
+                     <div className="text-xs text-gray-500 mb-1">ส่วนลด (%)</div>
+                     <InputNumber 
+                        min={0} max={100} className="w-full" value={editingLine.discount_percent} 
+                        onChange={(v) => {
+                           setCart(prev => prev.map(c => c.key === editingLine.key ? Object.assign(recalcLine({ ...c, discount_percent: Number(v||0) }), { code: c.code, name: c.name, maxQty: c.maxQty }) as CartItem : c));
+                        }} 
+                     />
+                  </Col>
+                  <Col span={12}>
+                     <div className="text-xs text-gray-500 mb-1">ส่วนลด (บาท)</div>
+                     <InputNumber 
+                        min={0} className="w-full" value={editingLine.discount_amount} 
+                        onChange={(v) => {
+                           setCart(prev => prev.map(c => c.key === editingLine.key ? Object.assign(recalcLine({ ...c, discount_amount: Number(v||0) }), { code: c.code, name: c.name, maxQty: c.maxQty }) as CartItem : c));
+                        }} 
+                     />
+                  </Col>
+               </Row>
+               <Row gutter={16}>
+                  <Col span={24}>
+                     <div className="text-xs text-gray-500 mb-1">ประเภทภาษี</div>
+                     <Select
+                        className="w-full"
+                        value={editingLine.vat_mode === "NONE" ? "NONE" : editingLine.vat_mode === "EXCL" && editingLine.vat_rate === 0 ? "EXCL_0" : editingLine.vat_mode === "INCL" ? "INCL_7" : "EXCL_7"}
+                        options={[
+                           { value: "EXCL_7", label: "แยกภาษี 7%" },
+                           { value: "INCL_7", label: "รวมภาษี 7%" },
+                           { value: "EXCL_0", label: "VAT 0%" },
+                           { value: "NONE", label: "ไม่มี VAT" },
+                        ]}
+                        onChange={(v) => {
+                           let vat_mode: any = "EXCL", vat_rate = 7;
+                           if (v === "NONE") { vat_mode = "NONE"; vat_rate = 0; }
+                           else if (v === "EXCL_0") { vat_mode = "EXCL"; vat_rate = 0; }
+                           else if (v === "INCL_7") { vat_mode = "INCL"; }
+                           setCart(prev => prev.map(c => c.key === editingLine.key ? Object.assign(recalcLine({ ...c, vat_mode, vat_rate }), { code: c.code, name: c.name, maxQty: c.maxQty }) as CartItem : c));
+                        }}
+                     />
+                  </Col>
+               </Row>
+               <Row gutter={16}>
+                  <Col span={12}>
+                     <div className="text-xs text-gray-500 mb-1">ประเภทคอมมิชชั่น</div>
+                     <Select className="w-full" value={editingLine.commission_mode}
+                        options={[{ value: "PERCENT", label: "เปอร์เซ็นต์" }, { value: "AMOUNT", label: "จำนวนเงิน" }]}
+                        onChange={(v) => setCart(prev => prev.map(c => c.key === editingLine.key ? Object.assign(recalcLine({ ...c, commission_mode: v as "AMOUNT"|"PERCENT" }), { code: c.code, name: c.name, maxQty: c.maxQty }) as CartItem : c))}
+                     />
+                  </Col>
+                  <Col span={12}>
+                     <div className="text-xs text-gray-500 mb-1">หัก ณ ที่จ่าย (%)</div>
+                     <InputNumber 
+                        min={0} max={100} className="w-full" value={editingLine.withholding_rate} 
+                        onChange={(v) => setCart(prev => prev.map(c => c.key === editingLine.key ? Object.assign(recalcLine({ ...c, withholding_rate: Number(v||0) }), { code: c.code, name: c.name, maxQty: c.maxQty }) as CartItem : c))}
+                     />
+                  </Col>
+               </Row>
+               <div className="bg-gray-50 p-3 mt-4 rounded border border-gray-200 text-sm">
+                  <div className="flex justify-between mb-1"><span>ก่อนภาษี:</span> <span>฿ {fmt(editingLine.amount_before_vat||0)}</span></div>
+                  <div className="flex justify-between mb-1 text-red-500"><span>ส่วนลดสุทธิ:</span> <span>-฿ {fmt(editingLine.discount_amount || 0)}</span></div>
+                  <div className="flex justify-between mb-1"><span>ภาษี:</span> <span>฿ {fmt((editingLine.total||0) - (editingLine.amount_before_vat||0))}</span></div>
+                  <div className="flex justify-between mb-1 text-orange-600"><span>หัก ณ:</span> <span>-฿ {fmt(editingLine.withholding_amount || 0)}</span></div>
+                  <Divider className="!my-2" />
+                  <div className="flex justify-between font-bold text-indigo-600 text-base"><span>รวมสุทธิบรรทัดนี้:</span> <span>฿ {fmt(editingLine.total || 0)}</span></div>
+               </div>
+            </div>
+         )}
+      </Modal>
+
     </div>
   );
 }
