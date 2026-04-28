@@ -1,5 +1,5 @@
 // PoCreatePage.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import {
   Button,
   Card,
@@ -27,7 +27,12 @@ import {
   type VendorRow,
   type WarehouseRow,
 } from "./purchaseApi";
-import { calcLine, calculateSummary, formatComma, parseComma } from "./purchaseUtils";
+import {
+  calcLine,
+  calculateSummary,
+  formatComma,
+  parseComma,
+} from "./purchaseUtils";
 
 const { Title, Text } = Typography;
 
@@ -60,13 +65,6 @@ type VendorPerson = {
   sort_order?: number;
 };
 
-type VendorDetailForPeople = {
-  id: number;
-  code: string;
-  name: string;
-  people?: VendorPerson[];
-};
-
 type TaxType = "EXCLUDE_VAT_7" | "INCLUDE_VAT_7" | "NO_VAT";
 
 type Line = {
@@ -81,8 +79,6 @@ type Line = {
   tax_type?: TaxType;
   manual_vat?: number | null;
 };
-
-
 
 function personLabel(p: VendorPerson) {
   const name =
@@ -132,6 +128,9 @@ export default function PoCreatePage() {
   const [headerDiscountType, setHeaderDiscountType] = useState<
     "PERCENT" | "AMOUNT"
   >("AMOUNT");
+  const [extraChargeType, setExtraChargeType] = useState<"PERCENT" | "AMOUNT">(
+    "AMOUNT",
+  );
 
   async function loadMaster() {
     try {
@@ -143,9 +142,19 @@ export default function PoCreatePage() {
         listWarehouses(),
       ]);
 
-      setProducts(p.filter((x) => x.is_active === 1 || (x.is_active as any) === true));
-      setVendors(v.filter((x) => (x.is_active === 1 || (x.is_active as any) === true) && (!x.type || x.type === "VENDOR" || x.type === "BOTH")));
-      setWarehouses(w.filter((x) => x.is_active === 1 || (x.is_active as any) === true));
+      setProducts(
+        p.filter((x) => x.is_active === 1 || (x.is_active as any) === true),
+      );
+      setVendors(
+        v.filter(
+          (x) =>
+            (x.is_active === 1 || (x.is_active as any) === true) &&
+            (!x.type || x.type === "VENDOR" || x.type === "BOTH"),
+        ),
+      );
+      setWarehouses(
+        w.filter((x) => x.is_active === 1 || (x.is_active as any) === true),
+      );
 
       form.setFieldsValue({
         issue_date: dayjs(),
@@ -157,6 +166,7 @@ export default function PoCreatePage() {
         note: null,
 
         // ✅ ค่าใช้จ่ายเพิ่มเติม (header)
+        extra_charge_value: 0,
         extra_charge_amt: 0,
         extra_charge_note: null,
       });
@@ -214,7 +224,7 @@ export default function PoCreatePage() {
           next.manual_vat = null;
         }
         return next;
-      })
+      }),
     );
   }
 
@@ -270,9 +280,14 @@ export default function PoCreatePage() {
   }, [vendorId]);
 
   // ✅ watch ค่าใช้จ่ายเพิ่มเติมจาก form
+  const extraChargeValue = Form.useWatch("extra_charge_value", form) as
+    | number
+    | undefined;
+
   const extraChargeAmt = Form.useWatch("extra_charge_amt", form) as
     | number
     | undefined;
+  const extraChargeDeductionAmt = Number(extraChargeAmt ?? 0) || 0;
 
   const headerDiscountValue = Form.useWatch("header_discount_value", form) as
     | number
@@ -280,11 +295,118 @@ export default function PoCreatePage() {
 
   const summary = useMemo(() => {
     return calculateSummary(lines, {
-      extra_charge_amt: extraChargeAmt,
+      extra_charge_amt: -extraChargeDeductionAmt,
       header_discount_type: headerDiscountType,
       header_discount_value: headerDiscountValue,
     });
-  }, [lines, extraChargeAmt, headerDiscountValue, headerDiscountType]);
+  }, [lines, extraChargeDeductionAmt, headerDiscountValue, headerDiscountType]);
+
+  const extraChargeBaseAmount = useMemo(() => {
+    return calculateSummary(lines, {
+      extra_charge_amt: 0,
+      header_discount_type: headerDiscountType,
+      header_discount_value: headerDiscountValue,
+    }).grandTotal;
+  }, [lines, headerDiscountType, headerDiscountValue]);
+
+  function calcExtraChargeAmount(
+    value: number | string | null | undefined,
+    type = extraChargeType,
+  ) {
+    const n = Number(value ?? 0);
+    const safeValue = Number.isFinite(n) ? n : 0;
+    const max = type === "PERCENT" ? 100 : extraChargeBaseAmount;
+    const normalizedValue = Math.min(Math.max(safeValue, 0), max);
+    return type === "PERCENT"
+      ? Number(((extraChargeBaseAmount * normalizedValue) / 100).toFixed(2))
+      : normalizedValue;
+  }
+
+  function normalizeExtraChargeValue(
+    value: number | string | null | undefined,
+    type = extraChargeType,
+  ) {
+    const n = Number(value ?? 0);
+    const safeValue = Number.isFinite(n) ? n : 0;
+    const max = type === "PERCENT" ? 100 : extraChargeBaseAmount;
+    return Math.min(Math.max(safeValue, 0), max);
+  }
+
+  function preventNonNumericKey(e: KeyboardEvent<HTMLInputElement>) {
+    if (
+      e.ctrlKey ||
+      e.metaKey ||
+      [
+        "Backspace",
+        "Delete",
+        "ArrowLeft",
+        "ArrowRight",
+        "ArrowUp",
+        "ArrowDown",
+        "Home",
+        "End",
+        "Tab",
+        "Enter",
+      ].includes(e.key)
+    ) {
+      return;
+    }
+
+    if (!/^[0-9.]$/.test(e.key)) {
+      e.preventDefault();
+      return;
+    }
+
+    const target = e.currentTarget;
+    if (e.key === "." && target.value.includes(".")) {
+      e.preventDefault();
+    }
+  }
+
+  function preventNonNumericPaste(e: ClipboardEvent<HTMLInputElement>) {
+    const text = e.clipboardData.getData("text").replace(/,/g, "").trim();
+    if (!/^\d*\.?\d*$/.test(text)) {
+      e.preventDefault();
+    }
+  }
+
+  function setExtraChargeValue(value: number | string | null | undefined) {
+    const normalizedValue = normalizeExtraChargeValue(value);
+    form.setFieldsValue({
+      extra_charge_value: normalizedValue,
+      extra_charge_amt: calcExtraChargeAmount(normalizedValue),
+    });
+  }
+
+  function handleExtraChargeTypeChange(type: "PERCENT" | "AMOUNT") {
+    setExtraChargeType(type);
+    const normalizedValue = normalizeExtraChargeValue(
+      form.getFieldValue("extra_charge_value"),
+      type,
+    );
+    form.setFieldsValue({
+      extra_charge_value: normalizedValue,
+      extra_charge_amt: calcExtraChargeAmount(normalizedValue, type),
+    });
+  }
+
+  useEffect(() => {
+    const current = Number(extraChargeValue ?? 0);
+    const normalizedValue = normalizeExtraChargeValue(current);
+    const amount = calcExtraChargeAmount(normalizedValue);
+    if (current !== normalizedValue || Number(extraChargeAmt ?? 0) !== amount) {
+      form.setFieldsValue({
+        extra_charge_value: normalizedValue,
+        extra_charge_amt: amount,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    extraChargeType,
+    extraChargeBaseAmount,
+    extraChargeValue,
+    extraChargeAmt,
+  ]);
 
   async function submit() {
     const v = await form.validateFields();
@@ -333,7 +455,7 @@ export default function PoCreatePage() {
           : null,
 
         // ✅ ค่าใช้จ่ายเพิ่มเติม (header)
-        extra_charge_amt: Number(v.extra_charge_amt ?? 0),
+        extra_charge_amt: -Number(v.extra_charge_amt ?? 0),
         extra_charge_note: v.extra_charge_note
           ? String(v.extra_charge_note)
           : null,
@@ -531,7 +653,8 @@ export default function PoCreatePage() {
                   <div className="text-sm leading-relaxed">
                     {[
                       vendorGoodsShipping.contact_name,
-                       vendorGoodsShipping.phone && `โทร: ${vendorGoodsShipping.phone}`,
+                      vendorGoodsShipping.phone &&
+                        `โทร: ${vendorGoodsShipping.phone}`,
                       vendorGoodsShipping.address_line,
                       vendorGoodsShipping.subdistrict &&
                         `ต.${vendorGoodsShipping.subdistrict}`,
@@ -593,6 +716,9 @@ export default function PoCreatePage() {
           </Form.Item>
 
           <div style={{ display: "none" }}>
+            <Form.Item name="extra_charge_value" initialValue={0}>
+              <InputNumber />
+            </Form.Item>
             <Form.Item name="extra_charge_amt" initialValue={0}>
               <InputNumber />
             </Form.Item>
@@ -700,7 +826,7 @@ export default function PoCreatePage() {
                       </div>
                     </div>
 
-                  {/* Row 2 */}
+                    {/* Row 2 */}
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mt-3">
                       <div className="md:col-span-2">
                         <div className="text-xs text-gray-500 mb-1">
@@ -759,16 +885,26 @@ export default function PoCreatePage() {
                       <div className="md:col-span-2">
                         <div className="text-xs text-gray-500 mb-1 flex items-center gap-1">
                           <span>VAT</span>
-                          {l.manual_vat !== undefined && l.manual_vat !== null && String(l.manual_vat) !== '' && (
-                            <span className="text-[10px] text-orange-500">*(แก้ไขเอง)*</span>
-                          )}
+                          {l.manual_vat !== undefined &&
+                            l.manual_vat !== null &&
+                            String(l.manual_vat) !== "" && (
+                              <span className="text-[10px] text-orange-500">
+                                *(แก้ไขเอง)*
+                              </span>
+                            )}
                         </div>
                         <InputNumber
                           min={0}
                           precision={2}
                           formatter={formatComma}
                           parser={parseComma}
-                          value={l.manual_vat !== undefined && l.manual_vat !== null && String(l.manual_vat) !== '' ? l.manual_vat : r.vat}
+                          value={
+                            l.manual_vat !== undefined &&
+                            l.manual_vat !== null &&
+                            String(l.manual_vat) !== ""
+                              ? l.manual_vat
+                              : r.vat
+                          }
                           onChange={(val) =>
                             setLine(l.key, { manual_vat: val })
                           }
@@ -833,17 +969,54 @@ export default function PoCreatePage() {
                   ค่าใช้จ่ายเพิ่มเติม
                 </div>
 
-                <Form.Item
-                  name="extra_charge_amt"
-                  label="จำนวนเงิน"
-                  className="!mb-2"
-                >
+                <Form.Item label="จำนวนเงิน" className="!mb-2">
+                  <Radio.Group
+                    value={extraChargeType}
+                    onChange={(e) =>
+                      handleExtraChargeTypeChange(e.target.value)
+                    }
+                    className="mb-2"
+                  >
+                    <Radio value="PERCENT">% </Radio>
+                    <Radio value="AMOUNT">บาท</Radio>
+                  </Radio.Group>
+
                   <InputNumber
                     min={0}
+                    max={
+                      extraChargeType === "PERCENT"
+                        ? 100
+                        : extraChargeBaseAmount
+                    }
+                    value={normalizeExtraChargeValue(extraChargeValue)}
+                    precision={2}
+                    formatter={formatComma}
+                    parser={parseComma}
+                    onKeyDown={preventNonNumericKey}
+                    onPaste={preventNonNumericPaste}
+                    onChange={setExtraChargeValue}
+                    onBlur={() =>
+                      setExtraChargeValue(
+                        form.getFieldValue("extra_charge_value"),
+                      )
+                    }
                     style={{ width: "100%" }}
                     placeholder="0"
                   />
                 </Form.Item>
+
+                {extraChargeType === "PERCENT" && (
+                  <Form.Item label="จำนวนเงินที่คำนวณจาก %" className="!mb-2">
+                    <InputNumber
+                      value={Number(extraChargeAmt ?? 0)}
+                      disabled
+                      precision={2}
+                      formatter={formatComma}
+                      parser={parseComma}
+                      style={{ width: "100%" }}
+                    />
+                  </Form.Item>
+                )}
 
                 <Form.Item
                   name="extra_charge_note"
