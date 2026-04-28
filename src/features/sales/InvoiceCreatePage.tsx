@@ -451,6 +451,8 @@ export default function InvoiceCreatePage() {
 
   const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
+
+  console.log("customers", customers);
   const [summary, setSummary] = useState<StockSummaryRow[]>([]);
   const [lines, setLines] = useState<Line[]>([createEmptyLine()]);
 
@@ -545,6 +547,8 @@ export default function InvoiceCreatePage() {
       })),
     [customers],
   );
+
+  console.log("customerOptions", customerOptions);
 
   const activeWarehouse = useMemo(() => {
     const id = Number(warehouseId || 0);
