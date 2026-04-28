@@ -128,9 +128,9 @@ export default function GrnCreatePage() {
         const [p, v, w] = await Promise.all([listProducts(), listVendors(), listWarehouses()]);
         if (!alive) return;
 
-        setProducts((Array.isArray(p) ? p : []).filter((x) => x.is_active === 1));
-        setVendors((Array.isArray(v) ? v : []).filter((x) => x.is_active === 1));
-        setWarehouses((Array.isArray(w) ? w : []).filter((x) => x.is_active === 1));
+        setProducts((Array.isArray(p) ? p : []).filter((x) => x.is_active === 1 || (x.is_active as any) === true));
+        setVendors((Array.isArray(v) ? v : []).filter((x) => (x.is_active === 1 || (x.is_active as any) === true) && (!x.type || x.type === "VENDOR" || x.type === "BOTH")));
+        setWarehouses((Array.isArray(w) ? w : []).filter((x) => x.is_active === 1 || (x.is_active as any) === true));
 
         form.setFieldsValue({ issue_date: dayjs() });
 

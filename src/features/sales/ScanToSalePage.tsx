@@ -88,7 +88,7 @@ export default function ScanToSalePage() {
       setWarehouses(Array.isArray(whRes.data?.warehouses) ? whRes.data.warehouses : (Array.isArray(whRes.data) ? whRes.data : []));
       
       const vends = Array.isArray(custRes.data?.rows) ? custRes.data.rows : (Array.isArray(custRes.data) ? custRes.data : []);
-      setCustomers(vends.filter((v: any) => v.type === "CUSTOMER" || v.type === "BOTH"));
+      setCustomers(vends.filter((v: any) => (v.is_active === 1 || v.is_active === true) && (v.type === "CUSTOMER" || v.type === "BOTH" || !v.type)));
 
       const fins = Array.isArray(finRes.data?.rows) ? finRes.data.rows : (Array.isArray(finRes.data) ? finRes.data : []);
       setFinanceAccounts(fins);

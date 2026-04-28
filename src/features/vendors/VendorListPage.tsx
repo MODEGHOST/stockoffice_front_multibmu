@@ -848,6 +848,7 @@ export default function VendorListPage() {
     return {
       code: compactStr(values.code),
       name: displayName || compactStr(values.code),
+      type: values.type || "VENDOR",
 
       tax_id: legacy_tax_id,
       tax_country: (biz.tax_country ?? "TH") as any,

@@ -29,8 +29,8 @@ export default function BillingNoteCreatePage() {
     async function loadCustomers() {
       try {
         const { data } = await api.get("/vendors");
-        const list = Array.isArray(data) ? data : [];
-        setCustomers(list.filter((v: VendorRow) => v.type === "CUSTOMER" || v.type === "BOTH"));
+        const list = Array.isArray(data) ? data : (data?.rows || []);
+        setCustomers(list.filter((v: VendorRow) => (v.is_active === 1 || (v.is_active as any) === true) && (v.type === "CUSTOMER" || v.type === "BOTH" || !v.type)));
       } catch (e: any) {
         message.error("ไม่สามารถโหลดรายชื่อลูกค้าได้");
       }

@@ -93,7 +93,6 @@ function commPercentUiFromValue(v: any): CommPercentUI {
   return "CUSTOM";
 }
 
-// ✅ ย้ายออกนอก component หลัก (กัน remount)
 const FieldLabel = memo(function FieldLabel({ children }: { children: any }) {
   return <div className="text-xs text-gray-500 mb-1">{children}</div>;
 });
@@ -493,8 +492,8 @@ export default function InvoiceCreatePage() {
   async function loadCustomers() {
     try {
       const { data } = await api.get("/vendors");
-      const list = Array.isArray(data) ? data : [];
-      setCustomers(list.filter((v: any) => v.type === "CUSTOMER" || v.type === "BOTH"));
+      const list = Array.isArray(data) ? data : (data?.rows || []);
+      setCustomers(list.filter((v: any) => (v.is_active === 1 || v.is_active === true) && (v.type === "CUSTOMER" || v.type === "BOTH" || !v.type)));
     } catch (e: any) {
       message.error("โหลดรายชื่อลูกค้าไม่สำเร็จ", 2);
     }

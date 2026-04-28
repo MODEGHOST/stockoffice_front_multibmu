@@ -22,6 +22,7 @@ export type VendorRow = {
   id: number;
   code: string;
   name: string;
+  type?: "VENDOR" | "CUSTOMER" | "BOTH" | null;
   tax_id: string | null;
   phone: string | null;
   email: string | null;
@@ -33,17 +34,17 @@ export type TaxType = "EXCLUDE_VAT_7" | "INCLUDE_VAT_7" | "NO_VAT";
 
 export async function listProducts(): Promise<ProductRow[]> {
   const { data } = await api.get("/products");
-  return Array.isArray(data) ? data : [];
+  return Array.isArray(data) ? data : (data?.rows || []);
 }
 
 export async function listWarehouses(): Promise<WarehouseRow[]> {
   const { data } = await api.get("/warehouses");
-  return Array.isArray(data) ? data : [];
+  return Array.isArray(data) ? data : (data?.rows || []);
 }
 
 export async function listVendors(): Promise<VendorRow[]> {
   const { data } = await api.get("/vendors");
-  return Array.isArray(data) ? data : [];
+  return Array.isArray(data) ? data : (data?.rows || []);
 }
 
 export type VendorContactPerson = {

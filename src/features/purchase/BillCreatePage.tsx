@@ -26,7 +26,7 @@ import {
   type ProductRow,
   type VendorRow,
   type WarehouseRow,
- } from "./purchaseApi";
+} from "./purchaseApi";
 import { formatComma, parseComma } from "./purchaseUtils";
 import { financeApi, type FinanceAccount } from "../finance/financeApi";
 
@@ -176,9 +176,9 @@ export default function BillCreatePage() {
         const [p, v, w, f] = await Promise.all([listProducts(), listVendors(), listWarehouses(), financeApi.list()]);
         if (!alive) return;
 
-        setProducts((Array.isArray(p) ? p : []).filter((x) => x.is_active === 1));
-        setVendors((Array.isArray(v) ? v : []).filter((x) => x.is_active === 1));
-        setWarehouses((Array.isArray(w) ? w : []).filter((x) => x.is_active === 1));
+        setProducts((Array.isArray(p) ? p : []).filter((x) => x.is_active === 1 || (x.is_active as any) === true));
+        setVendors((Array.isArray(v) ? v : []).filter((x) => (x.is_active === 1 || (x.is_active as any) === true) && (!x.type || x.type === "VENDOR" || x.type === "BOTH")));
+        setWarehouses((Array.isArray(w) ? w : []).filter((x) => x.is_active === 1 || (x.is_active as any) === true));
         setFinanceAccounts(f.filter((a) => a.is_active));
 
         form.setFieldsValue({
@@ -223,11 +223,11 @@ export default function BillCreatePage() {
           // BUT we need to set the value after options load. 
           // Ideally, we wait for vendor load, then set form. 
           // We can set a "pendingPersonId" state if needed, or just rely on react-hook-form value if we set it effectively.
-          
+
           // Let's force load vendor details now to ensure address shows up immediately
           if (po.header.vendor_id) {
-             await loadVendorPeople(po.header.vendor_id);
-             form.setFieldsValue({ vendor_person_id: po.header.vendor_person_id });
+            await loadVendorPeople(po.header.vendor_id);
+            form.setFieldsValue({ vendor_person_id: po.header.vendor_person_id });
           }
 
           const poItems = Array.isArray(po?.items) ? po.items : [];
@@ -281,8 +281,8 @@ export default function BillCreatePage() {
       // If NO person selected yet, select primary
       const currentPerson = form.getFieldValue("vendor_person_id");
       if (!currentPerson) {
-         const primary = sorted.find((p) => Number(p.is_primary ?? 0) === 1) || sorted[0];
-         if (primary) form.setFieldsValue({ vendor_person_id: primary.id });
+        const primary = sorted.find((p) => Number(p.is_primary ?? 0) === 1) || sorted[0];
+        if (primary) form.setFieldsValue({ vendor_person_id: primary.id });
       }
 
     } catch (e: any) {
@@ -297,10 +297,10 @@ export default function BillCreatePage() {
 
   useEffect(() => {
     if (!vendorIdSelector) {
-        setVendorPeople([]);
-        setVendorRegistered(null); 
-        setVendorShipping(null);
-        return;
+      setVendorPeople([]);
+      setVendorRegistered(null);
+      setVendorShipping(null);
+      return;
     }
     // Only reload if we are not already loading (this checks strict changes)
     // Actually simplicity: just load.
@@ -448,7 +448,7 @@ export default function BillCreatePage() {
         paid_date: v.paid_date ? dayjs(v.paid_date).format("YYYY-MM-DD") : null,
         finance_account_id: v.paid_date ? (v.finance_account_id ? Number(v.finance_account_id) : null) : null,
         note: v.note ? String(v.note) : null,
-        
+
         vendor_person_id: v.vendor_person_id ? Number(v.vendor_person_id) : null,
 
         extra_charge_amt: Number(v.extra_charge_amt ?? 0),
@@ -508,7 +508,7 @@ export default function BillCreatePage() {
       <Form form={form} layout="vertical">
         <Card loading={loading}>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-             <Form.Item
+            <Form.Item
               name="bill_no"
               label="เลขที่ Bill"
               className="md:col-span-1"
@@ -576,7 +576,7 @@ export default function BillCreatePage() {
             </Form.Item>
 
             <Form.Item name="po_id" label="อ้างอิง PO" className="md:col-span-1">
-               <Input value={poId ? String(poId) : ""} disabled placeholder="-" />
+              <Input value={poId ? String(poId) : ""} disabled placeholder="-" />
             </Form.Item>
 
             {/* Vendor */}
@@ -591,6 +591,12 @@ export default function BillCreatePage() {
                 placeholder="เลือกผู้ขาย"
                 // If locked by PO, allows changing? Usually yes, but warns. 
                 // But typically Bill from PO implies same vendor. Let's keep enabled but defaulted.
+                optionFilterProp="label"
+                filterOption={(input, option) =>
+                  String(option?.label ?? "")
+                    .toLowerCase()
+                    .includes(input.toLowerCase())
+                }
                 options={vendors.map((v) => ({
                   value: v.id,
                   label: `${v.code} - ${v.name}`,
@@ -672,7 +678,7 @@ export default function BillCreatePage() {
             </Form.Item>
 
             <Form.Item name="note" label="หมายเหตุ (ถ้ามี)" className="md:col-span-3">
-               <Input.TextArea rows={1} />
+              <Input.TextArea rows={1} />
             </Form.Item>
           </div>
 
@@ -918,48 +924,48 @@ export default function BillCreatePage() {
                   ค่าใช้จ่ายเพิ่มเติม
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                   <div className="col-span-2">
-                       <Form.Item name="extra_charge_note" noStyle>
-                           <Input placeholder="รายละเอียด (เช่น ค่าขนส่ง)" />
-                       </Form.Item>
-                   </div>
-                   <div className="col-span-2 mt-1">
-                       <Form.Item name="extra_charge_amt" noStyle>
-                           <InputNumber 
-                            className="w-full" 
-                            placeholder="จำนวนเงิน"
-                            min={0}
-                           />
-                       </Form.Item>
-                   </div>
+                  <div className="col-span-2">
+                    <Form.Item name="extra_charge_note" noStyle>
+                      <Input placeholder="รายละเอียด (เช่น ค่าขนส่ง)" />
+                    </Form.Item>
+                  </div>
+                  <div className="col-span-2 mt-1">
+                    <Form.Item name="extra_charge_amt" noStyle>
+                      <InputNumber
+                        className="w-full"
+                        placeholder="จำนวนเงิน"
+                        min={0}
+                      />
+                    </Form.Item>
+                  </div>
                 </div>
               </div>
 
               {/* Header Discount */}
               <Divider className="!my-2" />
               <div>
-                 <div className="text-xs text-gray-500 mb-2">ส่วนลดท้ายบิล</div>
-                 <Space.Compact className="w-full">
-                     <Select 
-                      value={headerDiscountType}
-                      onChange={setHeaderDiscountType}
-                      style={{ width: "35%" }}
-                      options={[
-                          { value: "AMOUNT", label: "บาท" },
-                          { value: "PERCENT", label: "%" }
-                      ]}
-                     />
-                     <Form.Item name="header_discount_value" noStyle>
-                        <InputNumber 
-                         className="w-[65%]"
-                         min={0}
-                        />
-                     </Form.Item>
-                 </Space.Compact>
-                 <div className="flex justify-between mt-1 text-xs text-gray-400">
-                    <div>คิดเป็นเงิน</div>
-                    <div>{summary.headerDiscount.toLocaleString()}</div>
-                 </div>
+                <div className="text-xs text-gray-500 mb-2">ส่วนลดท้ายบิล</div>
+                <Space.Compact className="w-full">
+                  <Select
+                    value={headerDiscountType}
+                    onChange={setHeaderDiscountType}
+                    style={{ width: "35%" }}
+                    options={[
+                      { value: "AMOUNT", label: "บาท" },
+                      { value: "PERCENT", label: "%" }
+                    ]}
+                  />
+                  <Form.Item name="header_discount_value" noStyle>
+                    <InputNumber
+                      className="w-[65%]"
+                      min={0}
+                    />
+                  </Form.Item>
+                </Space.Compact>
+                <div className="flex justify-between mt-1 text-xs text-gray-400">
+                  <div>คิดเป็นเงิน</div>
+                  <div>{summary.headerDiscount.toLocaleString()}</div>
+                </div>
               </div>
 
               <Divider className="!my-2" />

@@ -143,9 +143,9 @@ export default function PoCreatePage() {
         listWarehouses(),
       ]);
 
-      setProducts(p.filter((x) => x.is_active === 1));
-      setVendors(v.filter((x) => x.is_active === 1));
-      setWarehouses(w.filter((x) => x.is_active === 1));
+      setProducts(p.filter((x) => x.is_active === 1 || (x.is_active as any) === true));
+      setVendors(v.filter((x) => (x.is_active === 1 || (x.is_active as any) === true) && (!x.type || x.type === "VENDOR" || x.type === "BOTH")));
+      setWarehouses(w.filter((x) => x.is_active === 1 || (x.is_active as any) === true));
 
       form.setFieldsValue({
         issue_date: dayjs(),
@@ -470,6 +470,12 @@ export default function PoCreatePage() {
               <Select
                 showSearch
                 placeholder="เลือกผู้ขาย"
+                optionFilterProp="label"
+                filterOption={(input, option) =>
+                  String(option?.label ?? "")
+                    .toLowerCase()
+                    .includes(input.toLowerCase())
+                }
                 options={vendors.map((v) => ({
                   value: v.id,
                   label: `${v.code} - ${v.name}`,
