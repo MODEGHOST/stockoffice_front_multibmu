@@ -452,6 +452,8 @@ export default function InvoiceCreatePage() {
 
   const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
+
+  console.log("customers", customers);
   const [summary, setSummary] = useState<StockSummaryRow[]>([]);
   const [lines, setLines] = useState<Line[]>([createEmptyLine()]);
 
@@ -493,8 +495,16 @@ export default function InvoiceCreatePage() {
   async function loadCustomers() {
     try {
       const { data } = await api.get("/vendors");
-      const list = Array.isArray(data) ? data : [];
-      setCustomers(list.filter((v: any) => v.type === "CUSTOMER" || v.type === "BOTH"));
+
+      const list = Array.isArray(data?.rows)
+        ? data.rows
+        : Array.isArray(data)
+          ? data
+          : [];
+
+      setCustomers(
+        list.filter((v: any) => v.type === "CUSTOMER" || v.type === "BOTH"),
+      );
     } catch (e: any) {
       message.error("โหลดรายชื่อลูกค้าไม่สำเร็จ", 2);
     }
@@ -546,6 +556,8 @@ export default function InvoiceCreatePage() {
       })),
     [customers],
   );
+
+  console.log("customerOptions", customerOptions);
 
   const activeWarehouse = useMemo(() => {
     const id = Number(warehouseId || 0);
