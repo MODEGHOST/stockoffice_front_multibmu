@@ -851,7 +851,7 @@ export default function VendorListPage() {
       type: values.type || "VENDOR",
 
       tax_id: legacy_tax_id,
-      tax_country: (biz.tax_country ?? "TH") as any,
+      tax_country: (String(biz.tax_country ?? "TH").toUpperCase()) as any,
 
       office_type,
       legal_entity_type,
@@ -878,10 +878,11 @@ export default function VendorListPage() {
     };
   }
 
-  async function submit(values: FormValues) {
+  async function submit(_values: FormValues) {
     setSaving(true);
     try {
-      const payload = normalizePayload(values);
+      const fullValues = form.getFieldsValue(true) as FormValues;
+      const payload = normalizePayload(fullValues);
 
       if ((payload.contacts?.length || 0) > 5) return message.error("ช่องทางติดต่อรวมได้ไม่เกิน 5", 2);
       if ((payload.bank_accounts?.length || 0) > 5) return message.error("ข้อมูลธนาคารได้ไม่เกิน 5 รายการ", 2);
