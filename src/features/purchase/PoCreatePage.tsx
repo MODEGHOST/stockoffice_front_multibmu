@@ -287,7 +287,7 @@ export default function PoCreatePage() {
   const extraChargeAmt = Form.useWatch("extra_charge_amt", form) as
     | number
     | undefined;
-  const extraChargeDeductionAmt = Number(extraChargeAmt ?? 0) || 0;
+  const extraChargeAddAmt = Number(extraChargeAmt ?? 0) || 0;
 
   const headerDiscountValue = Form.useWatch("header_discount_value", form) as
     | number
@@ -295,11 +295,11 @@ export default function PoCreatePage() {
 
   const summary = useMemo(() => {
     return calculateSummary(lines, {
-      extra_charge_amt: -extraChargeDeductionAmt,
+      extra_charge_amt: extraChargeAddAmt,
       header_discount_type: headerDiscountType,
       header_discount_value: headerDiscountValue,
     });
-  }, [lines, extraChargeDeductionAmt, headerDiscountValue, headerDiscountType]);
+  }, [lines, extraChargeAddAmt, headerDiscountValue, headerDiscountType]);
 
   const extraChargeBaseAmount = useMemo(() => {
     return calculateSummary(lines, {
@@ -455,7 +455,7 @@ export default function PoCreatePage() {
           : null,
 
         // ✅ ค่าใช้จ่ายเพิ่มเติม (header)
-        extra_charge_amt: -Number(v.extra_charge_amt ?? 0),
+        extra_charge_amt: Number(v.extra_charge_amt ?? 0),
         extra_charge_note: v.extra_charge_note
           ? String(v.extra_charge_note)
           : null,
