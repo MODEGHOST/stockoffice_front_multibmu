@@ -135,15 +135,15 @@ export default function SettingsPage() {
          const mm = String(d.getMonth()+1).padStart(2,'0');
          const dd = String(d.getDate()).padStart(2,'0');
          let s = r.prefix;
-         if (r.reset_policy === 'DAILY') s += `${yyyy}${mm}${dd}-001`;
-         else if (r.reset_policy === 'MONTHLY') s += `${yyyy}${mm}-001`;
-         else if (r.reset_policy === 'YEARLY') s += `${yyyy}-001`;
+         if (r.reset_policy === 'DAILY') s += `${yyyy}${mm}${dd}-0001`;
+         else if (r.reset_policy === 'MONTHLY') s += `${yyyy}${mm}-0001`;
+         else if (r.reset_policy === 'YEARLY') s += `${yyyy}-0001`;
          return <Tag>{s}</Tag>;
       }
     }
   ];
 
-  const docTypes = ["QT", "IV", "RE", "DO", "Tax", "PO", "GRN", "IVT"]; 
+  const docTypes = ["QT", "IV", "RE", "DO", "Tax", "PO", "GRN", "IVT", "TF"]; 
   // Ensure we have rows for all types even if not in DB yet
   const docRows = docTypes.map(t => {
      const found = data?.doc_configs?.find(c => c.doc_type === t);
