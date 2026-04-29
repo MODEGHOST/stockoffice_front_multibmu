@@ -22,6 +22,11 @@ export type ProductUpsert = {
   is_vat?: number; // ✅ NEW
 };
 
+export type ProductUnit = {
+  id: number;
+  name: string;
+};
+
 export async function listProducts(params: Record<string, any> = {}): Promise<{ rows: ProductRow[], total: number }> {
   const { data } = await api.get("/products", { params });
   if (Array.isArray(data)) return { rows: data, total: data.length };
@@ -46,4 +51,14 @@ export async function setProductActive(id: number, is_active: number) {
 export async function searchProducts(q: string): Promise<ProductRow[]> {
   const { data } = await api.get("/products", { params: { q, limit: 50 } });
   return Array.isArray(data) ? data : (data?.rows || []);
+}
+
+export async function listProductUnits(q?: string): Promise<ProductUnit[]> {
+  const { data } = await api.get("/products/units", { params: { q } });
+  return Array.isArray(data) ? data : [];
+}
+
+export async function getNextProductCode(): Promise<string> {
+  const { data } = await api.get("/products/next-code");
+  return data?.code || "";
 }
