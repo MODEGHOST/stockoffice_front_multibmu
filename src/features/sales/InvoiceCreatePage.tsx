@@ -34,6 +34,13 @@ const { Text } = Typography;
 
 type WarehouseRow = { id: number; code?: string; name: string };
 type CustomerRow = { id: number; code?: string; name: string; type: string };
+type SellerRow = {
+  id: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  display_name?: string | null;
+  email?: string | null;
+};
 
 type StockSummaryRow = {
   company_id: number;
@@ -451,8 +458,8 @@ export default function InvoiceCreatePage() {
 
   const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
+  const [sellers, setSellers] = useState<SellerRow[]>([]);
 
-  console.log("customers", customers);
   const [summary, setSummary] = useState<StockSummaryRow[]>([]);
   const [lines, setLines] = useState<Line[]>([createEmptyLine()]);
 
@@ -501,6 +508,15 @@ export default function InvoiceCreatePage() {
     }
   }
 
+  async function loadSellers() {
+    try {
+      const { data } = await api.get("/sales/sellers");
+      setSellers(Array.isArray(data) ? data : []);
+    } catch (e: any) {
+      message.error("โหลดรายชื่อพนักงานขายไม่สำเร็จ", 2);
+    }
+  }
+
   async function loadStockSummary() {
     try {
       const { data } = await api.get("/stock/summary");
@@ -526,6 +542,7 @@ export default function InvoiceCreatePage() {
     });
     loadWarehouses();
     loadCustomers();
+    loadSellers();
     loadStockSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -548,7 +565,17 @@ export default function InvoiceCreatePage() {
     [customers],
   );
 
-  console.log("customerOptions", customerOptions);
+  const sellerOptions: Option[] = useMemo(
+    () =>
+      sellers.map((s) => {
+        const fullName = `${s.first_name || ""} ${s.last_name || ""}`.trim();
+        return {
+          value: s.id,
+          label: s.display_name || fullName || s.email || `User #${s.id}`,
+        };
+      }),
+    [sellers],
+  );
 
   const activeWarehouse = useMemo(() => {
     const id = Number(warehouseId || 0);
@@ -784,7 +811,7 @@ export default function InvoiceCreatePage() {
     try {
       const payload = {
         customer_id: v.customer_id,
-        seller_id: v.seller_id ?? null,
+        seller_id: v.seller_id ? Number(v.seller_id) : null,
         warehouse_id: whId,
         issue_date: dayjs(v.issue_date).format("YYYY-MM-DD"),
         valid_until: v.valid_until ? dayjs(v.valid_until).format("YYYY-MM-DD") : null,
@@ -879,7 +906,13 @@ export default function InvoiceCreatePage() {
 
             <Col xs={24} md={8}>
               <Form.Item name="seller_id" label="พนักงานขาย">
-                 <Input placeholder="เลือกพนักงาน (ถ้ามี)" />
+                <Select
+                  allowClear
+                  showSearch
+                  placeholder="เลือกพนักงาน (ถ้ามี)"
+                  optionFilterProp="label"
+                  options={sellerOptions}
+                />
               </Form.Item>
             </Col>
 
