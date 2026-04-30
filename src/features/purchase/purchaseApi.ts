@@ -334,6 +334,13 @@ export async function listPo(params?: {
   return data;
 }
 
+export async function getNextPoNo(issueDate?: string): Promise<{ po_no: string }> {
+  const { data } = await api.get("/purchase/po/next-no", {
+    params: issueDate ? { issue_date: issueDate } : undefined,
+  });
+  return data;
+}
+
 export async function createPo(payload: CreatePoPayload): Promise<{ id: number; po_no?: string }> {
   const { data } = await api.post("/purchase/po", payload);
   return data;
