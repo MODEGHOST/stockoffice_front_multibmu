@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { Button, Card, DatePicker, Form, Input, InputNumber, Select, Space, Typography, message, Divider, Tag } from "antd";
+import { useEffect, useMemo, useState, type ClipboardEvent, type KeyboardEvent } from "react";
+import { Button, Card, DatePicker, Form, Input, InputNumber, Radio, Select, Space, Typography, message, Divider, Tag } from "antd";
 import dayjs from "dayjs";
 import { useLocation, useNavigate } from "react-router-dom";
 import api from "../../lib/api";
 import {
   createGrn,
   getBill,
+  getNextGrnNo,
   getPo,
   listProducts,
   listVendors,
@@ -19,6 +20,21 @@ import {
 import { calcLine, calculateSummary, formatComma, parseComma } from "./purchaseUtils";
 
 const { Title, Text } = Typography;
+
+const extraChargeOptions = [
+  "ค่าขนส่ง",
+  "ค่ารถ",
+  "ค่าขนย้าย",
+  "ค่าแรง",
+  "ค่าคนงาน",
+  "ค่าติดตั้ง",
+  "ค่าบริการ",
+  "ค่าธรรมเนียม",
+  "ค่าประกันสินค้า",
+  "ค่าภาษีนำเข้า",
+  "ค่าเอกสาร",
+  "ค่าอื่น ๆ",
+];
 
   type Line = {
   key: string;
@@ -77,6 +93,8 @@ export default function GrnCreatePage() {
   const poId = billId ? null : poIdFromQuery ?? poIdFromState ?? null;
 
   const [loading, setLoading] = useState(false);
+  const [autoGrnNo, setAutoGrnNo] = useState(true);
+  const [grnNoLoading, setGrnNoLoading] = useState(false);
 
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [vendors, setVendors] = useState<VendorRow[]>([]);
@@ -132,7 +150,14 @@ export default function GrnCreatePage() {
         setVendors((Array.isArray(v) ? v : []).filter((x) => (x.is_active === 1 || (x.is_active as any) === true) && (!x.type || x.type === "VENDOR" || x.type === "BOTH")));
         setWarehouses((Array.isArray(w) ? w : []).filter((x) => x.is_active === 1 || (x.is_active as any) === true));
 
-        form.setFieldsValue({ issue_date: dayjs() });
+        form.setFieldsValue({
+          issue_date: dayjs(),
+          grn_no: "",
+          extra_charge_value: 0,
+          extra_charge_amt: 0,
+          extra_charge_note: null,
+          header_discount_value: 0,
+        });
 
         if (billId) {
           const bill = await getBill(billId);
@@ -145,6 +170,7 @@ export default function GrnCreatePage() {
             warehouse_id: bill?.header?.warehouse_id,
             note: bill?.header?.note ?? null,
             issue_date: dayjs(),
+            extra_charge_value: toNum(bill?.header?.extra_charge_amt, 0),
             extra_charge_amt: toNum(bill?.header?.extra_charge_amt, 0),
             extra_charge_note: bill?.header?.extra_charge_note,
             header_discount_value: toNum(bill?.header?.header_discount_value, 0),
@@ -152,12 +178,6 @@ export default function GrnCreatePage() {
 
           if (bill?.header?.header_discount_type) {
             setHeaderDiscountType(bill.header.header_discount_type);
-          }
-
-          const currentGrnNo = form.getFieldValue("grn_no");
-          if (!currentGrnNo) {
-            const bn = String(bill?.header?.bill_no ?? `BILL-${billId}`);
-            form.setFieldsValue({ grn_no: `GRN-${bn}` });
           }
 
           const billItems = Array.isArray(bill?.items) ? bill.items : [];
@@ -192,12 +212,14 @@ export default function GrnCreatePage() {
             warehouse_id: po?.header?.warehouse_id,
             note: po?.header?.note ?? null,
             issue_date: dayjs(),
+            extra_charge_value: toNum((po?.header as any)?.extra_charge_amt, 0),
+            extra_charge_amt: toNum((po?.header as any)?.extra_charge_amt, 0),
+            extra_charge_note: (po?.header as any)?.extra_charge_note ?? null,
+            header_discount_value: toNum((po?.header as any)?.header_discount_value, 0),
           });
 
-          const currentGrnNo = form.getFieldValue("grn_no");
-          if (!currentGrnNo) {
-            const pn = String(po?.header?.po_no ?? `PO-${poId}`);
-            form.setFieldsValue({ grn_no: `GRN-${pn}` });
+          if ((po?.header as any)?.header_discount_type) {
+            setHeaderDiscountType((po.header as any).header_discount_type);
           }
 
           const poItems = Array.isArray(po?.items) ? po.items : [];
@@ -228,6 +250,33 @@ export default function GrnCreatePage() {
       alive = false;
     };
   }, [billId, poId]);
+
+  async function loadNextGrnNo(issueDateValue?: any) {
+    const d = dayjs(issueDateValue || form.getFieldValue("issue_date") || dayjs());
+    if (!d.isValid()) return;
+
+    try {
+      setGrnNoLoading(true);
+      const next = await getNextGrnNo(d.format("YYYY-MM-DD"));
+      if (!next?.grn_no) throw new Error("GRN number not found");
+      setAutoGrnNo(true);
+      form.setFieldsValue({ grn_no: next.grn_no });
+    } catch {
+      setAutoGrnNo(false);
+      form.setFieldsValue({ grn_no: "" });
+      message.warning("ระบบ gen เลขที่ GRN ไม่ได้ กรุณากรอกเลขที่ GRN เอง", 2);
+    } finally {
+      setGrnNoLoading(false);
+    }
+  }
+
+  const issueDateWatcher = Form.useWatch("issue_date", form);
+
+  useEffect(() => {
+    if (!issueDateWatcher) return;
+    loadNextGrnNo(issueDateWatcher);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issueDateWatcher]);
 
   function addLine() {
     setLines((prev) => [
@@ -303,7 +352,7 @@ export default function GrnCreatePage() {
       setLoading(true);
 
       const payload = {
-        grn_no: String(v.grn_no).trim(),
+        grn_no: autoGrnNo ? null : String(v.grn_no).trim(),
         po_id: poId ?? null,
         bill_id: billId ?? null,
         vendor_id: toNum(v.vendor_id, 0),
@@ -312,10 +361,14 @@ export default function GrnCreatePage() {
         note: v.note ? String(v.note) : null,
         items: Array.from(merged.values()),
         // Add new header fields
-        extra_charge_amt: toNum(v.extra_charge_amt, 0),
-        extra_charge_note: v.extra_charge_note,
+        extra_charge_amt: toNum(form.getFieldValue("extra_charge_amt"), 0),
+        extra_charge_note: Array.isArray(form.getFieldValue("extra_charge_note"))
+          ? form.getFieldValue("extra_charge_note").filter(Boolean).join(", ")
+          : form.getFieldValue("extra_charge_note")
+            ? String(form.getFieldValue("extra_charge_note"))
+            : null,
         header_discount_type: headerDiscountType,
-        header_discount_value: toNum(v.header_discount_value, 0),
+        header_discount_value: toNum(form.getFieldValue("header_discount_value"), 0),
       };
 
       const r = await createGrn(payload);
@@ -354,9 +407,11 @@ export default function GrnCreatePage() {
   }, [billId, billData, poId, poData]);
 
   // Calculations
+  const extraChargeValue = Form.useWatch("extra_charge_value", form);
   const extraChargeAmt = Form.useWatch("extra_charge_amt", form);
   const headerDiscountValue = Form.useWatch("header_discount_value", form);
   const [headerDiscountType, setHeaderDiscountType] = useState<"PERCENT" | "AMOUNT">("AMOUNT");
+  const [extraChargeType, setExtraChargeType] = useState<"PERCENT" | "AMOUNT">("AMOUNT");
 
   const totals = useMemo(() => {
     return calculateSummary(lines, {
@@ -365,6 +420,113 @@ export default function GrnCreatePage() {
       header_discount_value: headerDiscountValue,
     });
   }, [lines, extraChargeAmt, headerDiscountValue, headerDiscountType]);
+
+  const extraChargeBaseAmount = useMemo(() => {
+    return calculateSummary(lines, {
+      extra_charge_amt: 0,
+      header_discount_type: "AMOUNT",
+      header_discount_value: 0,
+    }).net;
+  }, [lines]);
+
+  function calcExtraChargeAmount(
+    value: number | string | null | undefined,
+    type = extraChargeType,
+  ) {
+    const n = Number(value ?? 0);
+    const safeValue = Number.isFinite(n) ? n : 0;
+    const max = type === "PERCENT" ? 100 : extraChargeBaseAmount;
+    const normalizedValue = Math.min(Math.max(safeValue, 0), max);
+    return type === "PERCENT"
+      ? Number(((extraChargeBaseAmount * normalizedValue) / 100).toFixed(2))
+      : normalizedValue;
+  }
+
+  function normalizeExtraChargeValue(
+    value: number | string | null | undefined,
+    type = extraChargeType,
+  ) {
+    const n = Number(value ?? 0);
+    const safeValue = Number.isFinite(n) ? n : 0;
+    const max = type === "PERCENT" ? 100 : extraChargeBaseAmount;
+    return Math.min(Math.max(safeValue, 0), max);
+  }
+
+  function preventNonNumericKey(e: KeyboardEvent<HTMLInputElement>) {
+    if (
+      e.ctrlKey ||
+      e.metaKey ||
+      [
+        "Backspace",
+        "Delete",
+        "ArrowLeft",
+        "ArrowRight",
+        "ArrowUp",
+        "ArrowDown",
+        "Home",
+        "End",
+        "Tab",
+        "Enter",
+      ].includes(e.key)
+    ) {
+      return;
+    }
+
+    if (!/^[0-9.]$/.test(e.key)) {
+      e.preventDefault();
+      return;
+    }
+
+    const target = e.currentTarget;
+    if (e.key === "." && target.value.includes(".")) {
+      e.preventDefault();
+    }
+  }
+
+  function preventNonNumericPaste(e: ClipboardEvent<HTMLInputElement>) {
+    const text = e.clipboardData.getData("text").replace(/,/g, "").trim();
+    if (!/^\d*\.?\d*$/.test(text)) {
+      e.preventDefault();
+    }
+  }
+
+  function setExtraChargeValue(value: number | string | null | undefined) {
+    const normalizedValue = normalizeExtraChargeValue(value);
+    form.setFieldsValue({
+      extra_charge_value: normalizedValue,
+      extra_charge_amt: calcExtraChargeAmount(normalizedValue),
+    });
+  }
+
+  function handleExtraChargeTypeChange(type: "PERCENT" | "AMOUNT") {
+    setExtraChargeType(type);
+    const normalizedValue = normalizeExtraChargeValue(
+      form.getFieldValue("extra_charge_value"),
+      type,
+    );
+    form.setFieldsValue({
+      extra_charge_value: normalizedValue,
+      extra_charge_amt: calcExtraChargeAmount(normalizedValue, type),
+    });
+  }
+
+  useEffect(() => {
+    const current = Number(extraChargeValue ?? 0);
+    const normalizedValue = normalizeExtraChargeValue(current);
+    const amount = calcExtraChargeAmount(normalizedValue);
+    if (current !== normalizedValue || Number(extraChargeAmt ?? 0) !== amount) {
+      form.setFieldsValue({
+        extra_charge_value: normalizedValue,
+        extra_charge_amt: amount,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    extraChargeType,
+    extraChargeBaseAmount,
+    extraChargeValue,
+    extraChargeAmt,
+  ]);
 
   const taxOptions = [
     { value: "EXCLUDE_VAT_7", label: "แยกภาษี 7%" },
@@ -411,23 +573,45 @@ export default function GrnCreatePage() {
 
       {/* Header Form */}
       <Form form={form} layout="vertical">
+        <Form.Item name="extra_charge_value" hidden>
+          <Input />
+        </Form.Item>
+        <Form.Item name="extra_charge_amt" hidden>
+          <Input />
+        </Form.Item>
+        <Form.Item name="header_discount_value" hidden>
+          <Input />
+        </Form.Item>
         <Card loading={loading}>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
              <Form.Item
               name="grn_no"
               label="เลขที่ GRN"
               className="md:col-span-1"
-              rules={[
-                { required: true, message: "กรอกเลขที่ GRN" },
-                {
-                  validator: async (_, value) => {
-                    const s = String(value ?? "").trim();
-                    if (s.length < 3) throw new Error("เลขที่ GRN สั้นเกินไป");
-                  },
-                },
-              ]}
+              rules={
+                autoGrnNo
+                  ? []
+                  : [
+                      { required: true, message: "กรอกเลขที่ GRN" },
+                      {
+                        validator: async (_, value) => {
+                          const s = String(value ?? "").trim();
+                          if (s.length < 3) throw new Error("เลขที่ GRN สั้นเกินไป");
+                        },
+                      },
+                    ]
+              }
+              extra={
+                autoGrnNo
+                  ? "ระบบ gen เลขให้ตามวันที่รับเข้า และจะล็อกช่องนี้ไว้"
+                  : "ระบบ gen ไม่ได้ กรุณากรอกเลขที่ GRN เอง"
+              }
             >
-              <Input placeholder="เช่น GRN-2026-0001" />
+              <Input
+                placeholder={autoGrnNo ? "กำลัง gen เลขที่ GRN" : "เช่น GRN-202604-0001"}
+                disabled={autoGrnNo}
+                suffix={grnNoLoading ? "..." : autoGrnNo ? "AUTO" : "MANUAL"}
+              />
             </Form.Item>
 
             <Form.Item
@@ -750,41 +934,91 @@ export default function GrnCreatePage() {
                 <Divider className="!my-2" />
 
                 {/* Extra Charge */}
-                <div className="mb-2">
-                    <div className="text-xs text-gray-500 mb-1">ค่าใช้จ่ายเพิ่มเติม</div>
-                     <Form.Item name="extra_charge_note" noStyle>
-                        <Input placeholder="รายละเอียด (เช่น ค่าขนส่ง)" className="mb-1 text-xs" />
-                     </Form.Item>
-                     <Form.Item name="extra_charge_amt" noStyle>
-                        <InputNumber  className="w-full" min={0} placeholder="0.00" />
-                     </Form.Item>
+                <div>
+                  <div className="text-sm font-medium mb-2">ค่าใช้จ่ายเพิ่มเติม</div>
+
+                  <Form.Item label="จำนวนเงิน" className="!mb-2">
+                    <Radio.Group
+                      value={extraChargeType}
+                      onChange={(e) => handleExtraChargeTypeChange(e.target.value)}
+                      className="mb-2"
+                    >
+                      <Radio value="PERCENT">% </Radio>
+                      <Radio value="AMOUNT">บาท</Radio>
+                    </Radio.Group>
+
+                    <InputNumber
+                      min={0}
+                      max={extraChargeType === "PERCENT" ? 100 : extraChargeBaseAmount}
+                      value={normalizeExtraChargeValue(extraChargeValue)}
+                      precision={2}
+                      formatter={formatComma}
+                      parser={parseComma}
+                      onKeyDown={preventNonNumericKey}
+                      onPaste={preventNonNumericPaste}
+                      onChange={setExtraChargeValue}
+                      onBlur={() => setExtraChargeValue(form.getFieldValue("extra_charge_value"))}
+                      style={{ width: "100%" }}
+                      placeholder="0"
+                    />
+                  </Form.Item>
+
+                  {extraChargeType === "PERCENT" && (
+                    <Form.Item label="จำนวนเงินที่คำนวณจาก %" className="!mb-2">
+                      <InputNumber
+                        value={Number(extraChargeAmt ?? 0)}
+                        disabled
+                        precision={2}
+                        formatter={formatComma}
+                        parser={parseComma}
+                        style={{ width: "100%" }}
+                      />
+                    </Form.Item>
+                  )}
+
+                  <Form.Item name="extra_charge_note" label="รายละเอียด" className="!mb-0">
+                    <Select
+                      mode="tags"
+                      allowClear
+                      placeholder="เลือกหรือพิมพ์เอง"
+                      options={extraChargeOptions.map((x) => ({
+                        value: x,
+                        label: x,
+                      }))}
+                    />
+                  </Form.Item>
                 </div>
 
+                <Divider className="!my-2" />
+
                 {/* Header Discount */}
-                {/* Header Discount */}
-                <div className="mb-2">
-                   <div className="text-xs text-gray-500 mb-2">ส่วนลดท้ายบิล</div>
-                   <Space.Compact className="w-full">
-                       <Select 
-                        value={headerDiscountType}
-                        onChange={setHeaderDiscountType}
-                        style={{ width: "35%" }}
-                        options={[
-                            { value: "AMOUNT", label: "บาท" },
-                            { value: "PERCENT", label: "%" }
-                        ]}
-                       />
-                       <Form.Item name="header_discount_value" noStyle>
-                          <InputNumber 
-                           className="w-[65%]"
-                           min={0}
-                          />
-                       </Form.Item>
-                   </Space.Compact>
-                   <div className="flex justify-between mt-1 text-xs text-gray-400">
-                      <div>คิดเป็นเงิน</div>
-                      <div>{totals.headerDiscount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                   </div>
+                <div>
+                   <div className="text-sm font-medium mb-2">ส่วนลดท้ายบิล</div>
+                   <Radio.Group
+                    value={headerDiscountType}
+                    onChange={(e) => setHeaderDiscountType(e.target.value)}
+                    className="mb-2"
+                  >
+                    <Radio value="PERCENT">% </Radio>
+                    <Radio value="AMOUNT">บาท</Radio>
+                  </Radio.Group>
+
+                  <InputNumber
+                    min={0}
+                    style={{ width: "100%" }}
+                    value={headerDiscountValue}
+                    onKeyDown={preventNonNumericKey}
+                    onPaste={preventNonNumericPaste}
+                    onChange={(val) =>
+                      form.setFieldsValue({
+                        header_discount_value: val ?? 0,
+                      })
+                    }
+                  />
+                  <div className="flex justify-between mt-1 text-xs text-gray-400">
+                    <div>คิดเป็นเงิน</div>
+                    <div>{totals.headerDiscount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  </div>
                 </div>
 
                  <Divider className="!my-2" />
