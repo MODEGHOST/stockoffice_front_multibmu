@@ -23,7 +23,14 @@ import {
 import type { ColumnsType, TableProps } from "antd/es/table";
 import dayjs from "dayjs";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import {
+  PlusOutlined,
+  ReloadOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  SearchOutlined,
+  CloseOutlined,
+} from "@ant-design/icons";
 import {
   createVendor,
   getVendor,
@@ -408,14 +415,6 @@ export default function VendorListPage() {
 
   const [form] = Form.useForm<FormValues>();
 
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setSearchQuery(q);
-      setPage(1);
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [q]);
-
   const { data, isLoading, refetch } = useQuery({
     queryKey: [...QUERY_KEY, searchQuery, page, pageSize, sortKey, sortOrder],
     queryFn: () => listVendors({ q: searchQuery, page, limit: pageSize, sortKey, sortOrder }),
@@ -424,6 +423,17 @@ export default function VendorListPage() {
 
   const rows = data?.rows || [];
   const total = data?.total || 0;
+
+  function handleSearch() {
+    setSearchQuery(q.trim());
+    setPage(1);
+  }
+
+  function handleClearSearch() {
+    setQ("");
+    setSearchQuery("");
+    setPage(1);
+  }
 
   const onTableChange: TableProps<VendorRow>["onChange"] = (pagination, _filters, sorter) => {
     setPage(pagination.current || 1);
@@ -1142,7 +1152,19 @@ export default function VendorListPage() {
         </div>
 
         <Space>
-          <Input placeholder="ค้นหา รหัส/ชื่อ/Tax/เบอร์/อีเมล" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 360 }} allowClear />
+          <Input
+            placeholder="ค้นหา รหัส/ชื่อ/Tax/เบอร์/อีเมล"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onPressEnter={handleSearch}
+            style={{ width: 360 }}
+          />
+          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch} loading={isLoading}>
+            Search
+          </Button>
+          <Button icon={<CloseOutlined />} onClick={handleClearSearch} disabled={!q && !searchQuery}>
+            Clear
+          </Button>
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isLoading}>
             รีเฟรช
           </Button>

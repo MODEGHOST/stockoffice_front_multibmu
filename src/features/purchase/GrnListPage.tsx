@@ -4,7 +4,7 @@ import { Button, Card, Input, Space, Typography, message, Table, Tag, Select } f
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate } from "react-router-dom";
 import { listGrn, type GrnListRow } from "./purchaseApi";
-import { ReloadOutlined } from "@ant-design/icons";
+import { CloseOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 
 const { Title, Text } = Typography;
 
@@ -18,6 +18,7 @@ export default function GrnListPage() {
   const nav = useNavigate();
 
   const [q, setQ] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [status, setStatus] = useState<"" | GrnListRow["status"]>("");
   const [loading, setLoading] = useState(false);
 
@@ -28,12 +29,12 @@ export default function GrnListPage() {
 
   const params = useMemo(
     () => ({
-      q: q.trim(),
+      q: searchQuery,
       status,
       page,
       pageSize,
     }),
-    [q, status, page, pageSize],
+    [searchQuery, status, page, pageSize],
   );
 
   async function load() {
@@ -109,6 +110,17 @@ export default function GrnListPage() {
     }
   };
 
+  function handleSearch() {
+    setSearchQuery(q.trim());
+    setPage(1);
+  }
+
+  function handleClearSearch() {
+    setQ("");
+    setSearchQuery("");
+    setPage(1);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -134,13 +146,16 @@ export default function GrnListPage() {
             <Input
               placeholder="ค้นหา GRN No / Vendor / Warehouse"
               value={q}
-              onChange={(e) => {
-                setQ(e.target.value);
-                setPage(1);
-              }}
-              allowClear
+              onChange={(e) => setQ(e.target.value)}
+              onPressEnter={handleSearch}
               style={{ width: 340 }}
             />
+            <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch} loading={loading}>
+              Search
+            </Button>
+            <Button icon={<CloseOutlined />} onClick={handleClearSearch} disabled={!q && !searchQuery}>
+              Clear
+            </Button>
 
             <Select
               value={status}

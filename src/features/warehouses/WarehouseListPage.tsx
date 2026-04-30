@@ -14,7 +14,13 @@ import {
   Col,
   Table,
 } from "antd";
-import { PlusOutlined, ReloadOutlined, EditOutlined } from "@ant-design/icons";
+import {
+  PlusOutlined,
+  ReloadOutlined,
+  EditOutlined,
+  SearchOutlined,
+  CloseOutlined,
+} from "@ant-design/icons";
 import {
   createWarehouse,
   listWarehouses,
@@ -70,6 +76,7 @@ export default function WarehouseListPage() {
   const [rows, setRows] = useState<WarehouseRow[]>([]);
   const [summary, setSummary] = useState<StockSummaryRow[]>([]);
   const [q, setQ] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<WarehouseRow | null>(null);
@@ -176,7 +183,7 @@ export default function WarehouseListPage() {
   }, [summary]);
 
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
+    const needle = searchQuery.trim().toLowerCase();
     if (!needle) return rows;
 
     return rows.filter((r) => {
@@ -191,7 +198,16 @@ export default function WarehouseListPage() {
         desc.includes(needle)
       );
     });
-  }, [rows, q]);
+  }, [rows, searchQuery]);
+
+  function handleSearch() {
+    setSearchQuery(q.trim());
+  }
+
+  function handleClearSearch() {
+    setQ("");
+    setSearchQuery("");
+  }
 
   function openCreate() {
     setEditing(null);
@@ -295,9 +311,15 @@ export default function WarehouseListPage() {
             placeholder="ค้นหา code / ชื่อคลัง / ที่ตั้ง / รายละเอียด"
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            onPressEnter={handleSearch}
             style={{ width: 320 }}
-            allowClear
           />
+          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch} loading={loading}>
+            Search
+          </Button>
+          <Button icon={<CloseOutlined />} onClick={handleClearSearch} disabled={!q && !searchQuery}>
+            Clear
+          </Button>
           <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
             รีเฟรช
           </Button>
