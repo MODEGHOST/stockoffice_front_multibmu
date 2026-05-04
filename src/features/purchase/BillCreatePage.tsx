@@ -725,7 +725,16 @@ export default function BillCreatePage() {
               label="วันที่ชำระ (Paid Date)"
               className="md:col-span-1"
             >
-              <DatePicker className="w-full" placeholder="ระบุตราบเมื่อชำระแล้ว" format="DD/MM/YYYY" />
+              <DatePicker
+                className="w-full"
+                placeholder="ระบุตราบเมื่อชำระแล้ว"
+                format="DD/MM/YYYY"
+                disabledDate={(current) =>
+                  issueDateWatcher
+                    ? current.isBefore(dayjs(issueDateWatcher).startOf("day"))
+                    : false
+                }
+              />
             </Form.Item>
 
             <Form.Item
@@ -939,6 +948,8 @@ export default function BillCreatePage() {
                           value={l.qty}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           onChange={(val) =>
                             setLine(l.key, { qty: Number(val || 0) })
                           }
@@ -955,6 +966,8 @@ export default function BillCreatePage() {
                           value={l.unit_cost}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           onChange={(val) =>
                             setLine(l.key, { unit_cost: Number(val ?? 0) })
                           }
@@ -975,6 +988,8 @@ export default function BillCreatePage() {
                           value={l.discount_pct}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           onChange={(val) =>
                             setLine(l.key, { discount_pct: Number(val ?? 0) })
                           }
@@ -991,6 +1006,8 @@ export default function BillCreatePage() {
                           value={l.discount_amt}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           onChange={(val) =>
                             setLine(l.key, { discount_amt: Number(val ?? 0) })
                           }
@@ -998,7 +1015,7 @@ export default function BillCreatePage() {
                         />
                       </div>
 
-                      <div className="md:col-span-4">
+                      <div className="md:col-span-2">
                         <div className="text-xs text-gray-500 mb-1">
                           ประเภทภาษี
                         </div>
@@ -1031,6 +1048,8 @@ export default function BillCreatePage() {
                           precision={2}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           value={l.manual_vat !== undefined && l.manual_vat !== null && String(l.manual_vat) !== '' ? l.manual_vat : r.vat}
                           onChange={(val) =>
                             setLine(l.key, { manual_vat: val })

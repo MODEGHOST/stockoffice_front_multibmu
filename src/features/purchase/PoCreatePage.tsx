@@ -203,12 +203,29 @@ export default function PoCreatePage() {
   }
 
   const issueDateWatcher = Form.useWatch("issue_date", form);
+  const expectedDateWatcher = Form.useWatch("expected_date", form);
 
   useEffect(() => {
     if (!issueDateWatcher) return;
     loadNextPoNo(issueDateWatcher);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [issueDateWatcher]);
+
+  useEffect(() => {
+    if (!issueDateWatcher || !expectedDateWatcher) return;
+
+    const issueDate = dayjs(issueDateWatcher).startOf("day");
+    const expectedDate = dayjs(expectedDateWatcher).startOf("day");
+
+    if (expectedDate.isBefore(issueDate)) {
+      form.setFieldsValue({ expected_date: null });
+    }
+  }, [form, issueDateWatcher, expectedDateWatcher]);
+
+  function disableExpectedDate(current: dayjs.Dayjs) {
+    if (!current || !issueDateWatcher) return false;
+    return current.startOf("day").isBefore(dayjs(issueDateWatcher).startOf("day"));
+  }
 
   function normalizePoNo(v: any) {
     if (v === undefined || v === null) return null;
@@ -593,7 +610,11 @@ export default function PoCreatePage() {
               label="วันที่คาดว่าจะรับเข้า"
               className="md:col-span-1"
             >
-              <DatePicker className="w-full" format="DD/MM/YYYY" />
+              <DatePicker
+                className="w-full"
+                format="DD/MM/YYYY"
+                disabledDate={disableExpectedDate}
+              />
             </Form.Item>
 
             {/* Vendor */}
@@ -816,6 +837,8 @@ export default function PoCreatePage() {
                           value={l.qty}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           onChange={(val) =>
                             setLine(l.key, { qty: Number(val || 0) })
                           }
@@ -832,6 +855,8 @@ export default function PoCreatePage() {
                           value={l.unit_cost}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           onChange={(val) =>
                             setLine(l.key, { unit_cost: Number(val ?? 0) })
                           }
@@ -852,6 +877,8 @@ export default function PoCreatePage() {
                           value={l.discount_pct}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           onChange={(val) =>
                             setLine(l.key, { discount_pct: Number(val ?? 0) })
                           }
@@ -868,6 +895,8 @@ export default function PoCreatePage() {
                           value={l.discount_amt}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           onChange={(val) =>
                             setLine(l.key, { discount_amt: Number(val ?? 0) })
                           }
@@ -912,6 +941,8 @@ export default function PoCreatePage() {
                           precision={2}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           value={
                             l.manual_vat !== undefined &&
                             l.manual_vat !== null &&
@@ -1072,6 +1103,10 @@ export default function PoCreatePage() {
                     })
                   }
                 />
+                <div className="flex justify-between mt-1 text-xs text-gray-400">
+                  <div>คิดเป็นเงิน</div>
+                  <div>{summary.headerDiscount.toLocaleString()}</div>
+                </div>
               </div>
 
               <Divider className="!my-2" />

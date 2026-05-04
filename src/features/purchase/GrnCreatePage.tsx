@@ -803,6 +803,8 @@ export default function GrnCreatePage() {
                                 value={l.qty}
                                 formatter={formatComma}
                                 parser={parseComma}
+                                onKeyDown={preventNonNumericKey}
+                                onPaste={preventNonNumericPaste}
                                 onChange={(val) => setLine(l.key, { qty: Number(val || 0) })}
                             />
                         </div>
@@ -815,6 +817,8 @@ export default function GrnCreatePage() {
                                 value={l.unit_cost}
                                 formatter={formatComma}
                                 parser={parseComma}
+                                onKeyDown={preventNonNumericKey}
+                                onPaste={preventNonNumericPaste}
                                 onChange={(val) => setLine(l.key, { unit_cost: Number(val || 0) })}
                             />
                         </div>
@@ -831,6 +835,8 @@ export default function GrnCreatePage() {
                               value={l.discount_pct}
                               formatter={formatComma}
                               parser={parseComma}
+                              onKeyDown={preventNonNumericKey}
+                              onPaste={preventNonNumericPaste}
                               onChange={(val) => setLine(l.key, { discount_pct: Number(val || 0) })}
                            />
                         </div>
@@ -843,6 +849,8 @@ export default function GrnCreatePage() {
                               value={l.discount_amt}
                               formatter={formatComma}
                               parser={parseComma}
+                              onKeyDown={preventNonNumericKey}
+                              onPaste={preventNonNumericPaste}
                               onChange={(val) => setLine(l.key, { discount_amt: Number(val || 0) })}
                            />
                         </div>
@@ -879,6 +887,8 @@ export default function GrnCreatePage() {
                                 className="w-full"
                                 formatter={formatComma}
                                 parser={parseComma}
+                                onKeyDown={preventNonNumericKey}
+                                onPaste={preventNonNumericPaste}
                                 value={l.manual_vat !== undefined && l.manual_vat !== null && String(l.manual_vat) !== '' ? l.manual_vat : r.vat}
                                 onChange={(val) => setLine(l.key, { manual_vat: val })}
                            />
