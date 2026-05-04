@@ -1,5 +1,13 @@
 // src/features/sales/InvoiceCreatePage.tsx
-import { memo, useEffect, useMemo, useState, useCallback } from "react";
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+  type KeyboardEvent,
+  type ClipboardEvent,
+} from "react";
 import {
   Button,
   Card,
@@ -31,6 +39,73 @@ import {
 } from "./invoiceCalc";
 
 const { Text } = Typography;
+
+function preventNonNumericKey(e: KeyboardEvent<HTMLInputElement>) {
+  if (
+    e.ctrlKey ||
+    e.metaKey ||
+    [
+      "Backspace",
+      "Delete",
+      "ArrowLeft",
+      "ArrowRight",
+      "ArrowUp",
+      "ArrowDown",
+      "Home",
+      "End",
+      "Tab",
+      "Enter",
+    ].includes(e.key)
+  ) {
+    return;
+  }
+  if (!/^[0-9.]$/.test(e.key)) {
+    e.preventDefault();
+    return;
+  }
+  const target = e.currentTarget;
+  if (e.key === "." && target.value.includes(".")) {
+    e.preventDefault();
+  }
+}
+
+function preventNonNumericPaste(e: ClipboardEvent<HTMLInputElement>) {
+  const text = e.clipboardData.getData("text").replace(/,/g, "").trim();
+  if (!/^\d*\.?\d*$/.test(text)) {
+    e.preventDefault();
+  }
+}
+
+function preventNonIntegerKey(e: KeyboardEvent<HTMLInputElement>) {
+  if (
+    e.ctrlKey ||
+    e.metaKey ||
+    [
+      "Backspace",
+      "Delete",
+      "ArrowLeft",
+      "ArrowRight",
+      "ArrowUp",
+      "ArrowDown",
+      "Home",
+      "End",
+      "Tab",
+      "Enter",
+    ].includes(e.key)
+  ) {
+    return;
+  }
+  if (!/^[0-9]$/.test(e.key)) {
+    e.preventDefault();
+  }
+}
+
+function preventNonIntegerPaste(e: ClipboardEvent<HTMLInputElement>) {
+  const text = e.clipboardData.getData("text").replace(/,/g, "").trim();
+  if (!/^\d*$/.test(text)) {
+    e.preventDefault();
+  }
+}
 
 type WarehouseRow = { id: number; code?: string; name: string };
 type CustomerRow = { id: number; code?: string; name: string; type: string };
@@ -228,9 +303,17 @@ const LineCard = memo(function LineCard({
             className="w-full"
             min={1}
             max={max || undefined}
+            step={1}
+            precision={0}
             disabled={disableInputs || !line.product_id}
             value={line.quantity}
-            onChange={(v) => updateLine(line.key, { quantity: Number(v || 1) })}
+            onKeyDown={preventNonIntegerKey}
+            onPaste={preventNonIntegerPaste}
+            onChange={(v) =>
+              updateLine(line.key, {
+                quantity: Math.trunc(Number(v || 1)),
+              })
+            }
           />
         </Col>
 
@@ -240,8 +323,11 @@ const LineCard = memo(function LineCard({
           <InputNumber
             className="w-full"
             min={0}
+            step={0.01}
             disabled={disableInputs}
             value={line.price}
+            onKeyDown={preventNonNumericKey}
+            onPaste={preventNonNumericPaste}
             onChange={(v) => updateLine(line.key, { price: Number(v ?? 0) })}
           />
         </Col>
@@ -259,8 +345,11 @@ const LineCard = memo(function LineCard({
                 className="w-full"
                 min={0}
                 max={100}
+                step={0.01}
                 disabled={disableInputs}
                 value={line.discount_percent}
+                onKeyDown={preventNonNumericKey}
+                onPaste={preventNonNumericPaste}
                 onChange={(v) =>
                   updateLine(line.key, { discount_percent: Number(v || 0) })
                 }
@@ -272,8 +361,11 @@ const LineCard = memo(function LineCard({
               <InputNumber
                 className="w-full"
                 min={0}
+                step={0.01}
                 disabled={disableInputs}
                 value={line.discount_amount}
+                onKeyDown={preventNonNumericKey}
+                onPaste={preventNonNumericPaste}
                 onChange={(v) =>
                   updateLine(line.key, { discount_amount: Number(v || 0) })
                 }
@@ -374,6 +466,7 @@ const LineCard = memo(function LineCard({
                         className="w-full"
                         min={0}
                         max={100}
+                        step={0.01}
                         disabled={disableInputs || commUi !== "CUSTOM"}
                         value={Number(
                           commUi === "CUSTOM"
@@ -381,6 +474,8 @@ const LineCard = memo(function LineCard({
                             : line.commission_value ?? 0,
                         )}
                         addonAfter="%"
+                        onKeyDown={preventNonNumericKey}
+                        onPaste={preventNonNumericPaste}
                         onChange={(v) => {
                           const n = Number(v ?? 0);
                           setCommCustom(line.key, n);
@@ -426,8 +521,11 @@ const LineCard = memo(function LineCard({
                 className="w-full"
                 min={0}
                 max={100}
+                step={0.01}
                 disabled={disableInputs}
                 value={line.withholding_rate}
+                onKeyDown={preventNonNumericKey}
+                onPaste={preventNonNumericPaste}
                 onChange={(v) =>
                   updateLine(line.key, { withholding_rate: Number(v || 0) })
                 }
@@ -465,6 +563,22 @@ export default function InvoiceCreatePage() {
 
   const warehouseId = Form.useWatch("warehouse_id", form) as number | undefined;
   const createAsStatus = Form.useWatch("create_as_status", form);
+  const issueDateWatcher = Form.useWatch("issue_date", form);
+  const validUntilWatcher = Form.useWatch("valid_until", form);
+
+  useEffect(() => {
+    if (!issueDateWatcher || !validUntilWatcher) return;
+    const issueDate = dayjs(issueDateWatcher).startOf("day");
+    const validUntil = dayjs(validUntilWatcher).startOf("day");
+    if (validUntil.isBefore(issueDate)) {
+      form.setFieldsValue({ valid_until: null });
+    }
+  }, [form, issueDateWatcher, validUntilWatcher]);
+
+  function disableValidUntilDate(current: dayjs.Dayjs) {
+    if (!current || !issueDateWatcher) return false;
+    return current.startOf("day").isBefore(dayjs(issueDateWatcher).startOf("day"));
+  }
 
   const [commUiByKey, setCommUiByKey] = useState<Record<string, CommPercentUI>>(
     {},
@@ -900,7 +1014,11 @@ export default function InvoiceCreatePage() {
 
             <Col xs={24} md={12} lg={6}>
               <Form.Item name="valid_until" label="ยืนยันราคาถึง">
-                <DatePicker className="w-full" format="YYYY-MM-DD" />
+                <DatePicker
+                  className="w-full"
+                  format="YYYY-MM-DD"
+                  disabledDate={disableValidUntilDate}
+                />
               </Form.Item>
             </Col>
 
