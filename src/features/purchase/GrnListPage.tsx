@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
 import { Button, Card, Input, Space, Typography, message, Table, Tag, Select } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import type { ColumnsType, TableProps } from "antd/es/table";
 import { useNavigate } from "react-router-dom";
 import { listGrn, type GrnListRow } from "./purchaseApi";
 import { CloseOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
@@ -26,6 +26,8 @@ export default function GrnListPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
+  const [sortBy, setSortBy] = useState<string>("");
+  const [sortDir, setSortDir] = useState<"asc" | "desc" | "">("");
 
   const params = useMemo(
     () => ({
@@ -33,8 +35,10 @@ export default function GrnListPage() {
       status,
       page,
       pageSize,
+      sort_by: sortBy || undefined,
+      sort_dir: (sortDir || undefined) as "asc" | "desc" | undefined,
     }),
-    [searchQuery, status, page, pageSize],
+    [searchQuery, status, page, pageSize, sortBy, sortDir],
   );
 
   async function load() {
@@ -53,10 +57,21 @@ export default function GrnListPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.q, params.status, params.page, params.pageSize]);
+  }, [params.q, params.status, params.page, params.pageSize, params.sort_by, params.sort_dir]);
 
   const columns: ColumnsType<GrnListRow> = [
-    { title: "GRN No", dataIndex: "grn_no", key: "grn_no", width: 160 },
+    {
+      title: "GRN No",
+      dataIndex: "grn_no",
+      key: "grn_no",
+      width: 160,
+      sorter: true,
+      render: (v, r) => (
+        <Button type="link" onClick={() => nav(`/purchase/grn/${r.id}`)} style={{ padding: 0 }}>
+          {v}
+        </Button>
+      ),
+    },
     {
       title: "สถานะ",
       dataIndex: "status",
@@ -102,13 +117,25 @@ export default function GrnListPage() {
     },
   ];
 
-  const onTableChange: any = (_pagination: any, filters: any, _sorter: any) => {
+  const onTableChange: NonNullable<TableProps<GrnListRow>["onChange"]> = (_pagination, filters, sorter) => {
     const st = (filters?.status?.[0] as GrnListRow["status"]) || "";
     if (st !== status) {
       setStatus(st);
       setPage(1);
     }
-  };
+
+    if (!Array.isArray(sorter)) {
+      const order = sorter.order;
+      const field = (sorter.field ?? sorter.columnKey) as string | undefined;
+      if (!order || !field) {
+        setSortBy("");
+        setSortDir("");
+      } else {
+        setSortBy(field);
+        setSortDir(order === "ascend" ? "asc" : "desc");
+      }
+    }
+  }
 
   function handleSearch() {
     setSearchQuery(q.trim());

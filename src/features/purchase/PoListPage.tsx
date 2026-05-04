@@ -74,6 +74,11 @@ export default function PoListPage() {
       key: "po_no",
       width: 170,
       sorter: true,
+      render: (v, r) => (
+        <Button type="link" onClick={() => nav(`/purchase/po/${r.id}`)} style={{ padding: 0 }}>
+          {v}
+        </Button>
+      ),
     },
     {
       title: "สถานะ",
