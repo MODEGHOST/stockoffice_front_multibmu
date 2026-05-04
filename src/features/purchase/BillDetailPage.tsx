@@ -63,6 +63,8 @@ export default function BillDetailPage() {
 
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [cancelStepOpen, setCancelStepOpen] = useState(false);
+  const [cancelStepReason, setCancelStepReason] = useState("");
   const [acting, setActing] = useState(false);
 
 
@@ -154,6 +156,27 @@ export default function BillDetailPage() {
     }
   }
 
+  async function onCancelStep() {
+    const reason = cancelStepReason.trim();
+    if (reason.length < 5) {
+      message.error("กรอกเหตุผลอย่างน้อย 5 ตัวอักษร", 2);
+      return;
+    }
+
+    try {
+      setActing(true);
+      await cancelBill(billId, reason);
+      message.success("ยกเลิก Bill แล้ว กลับไปหน้า PO", 1.2);
+      setCancelStepOpen(false);
+      setCancelStepReason("");
+      nav(`/purchase/po/${header?.po_id}`);
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || "ยกเลิกไม่สำเร็จ", 2);
+    } finally {
+      setActing(false);
+    }
+  }
+
   // Map Header Fields (Using same logic as PO via utility)
   const summary = useMemo(() => {
     return calculateSummary(items, header);
@@ -216,6 +239,16 @@ export default function BillDetailPage() {
             >
               Cancel
             </Button>
+
+            {header?.po_id && (
+              <Button
+                danger
+                onClick={() => setCancelStepOpen(true)}
+                disabled={!canCancel || acting}
+              >
+                Cancel Step
+              </Button>
+            )}
 
             <Button
               type="default"
@@ -519,6 +552,29 @@ export default function BillDetailPage() {
           rows={4}
           value={cancelReason}
           onChange={(e) => setCancelReason(e.target.value)}
+          placeholder="เหตุผล (อย่างน้อย 5 ตัวอักษร)"
+        />
+      </Modal>
+
+      <Modal
+        open={cancelStepOpen}
+        title="Cancel Step — ยกเลิก Bill และกลับสู่ PO"
+        okText="ยืนยันยกเลิก Step"
+        okButtonProps={{ danger: true, loading: acting }}
+        onOk={onCancelStep}
+        centered
+        onCancel={() => {
+          setCancelStepOpen(false);
+          setCancelStepReason("");
+        }}
+      >
+        <p className="mb-3 text-gray-600">
+          Bill นี้จะถูกยกเลิก และระบบจะพาคุณกลับไปหน้า PO #{header?.po_id}
+        </p>
+        <Input.TextArea
+          rows={4}
+          value={cancelStepReason}
+          onChange={(e) => setCancelStepReason(e.target.value)}
           placeholder="เหตุผล (อย่างน้อย 5 ตัวอักษร)"
         />
       </Modal>

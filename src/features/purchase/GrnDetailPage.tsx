@@ -30,6 +30,8 @@ export default function GrnDetailPage() {
 
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [cancelStepOpen, setCancelStepOpen] = useState(false);
+  const [cancelStepReason, setCancelStepReason] = useState("");
   const [acting, setActing] = useState(false);
 
   async function load() {
@@ -122,6 +124,39 @@ export default function GrnDetailPage() {
     }
   }
 
+  async function onCancelStep() {
+    const reason = cancelStepReason.trim();
+    if (reason.length < 5) {
+      message.error("กรอกเหตุผลอย่างน้อย 5 ตัวอักษร", 2);
+      return;
+    }
+
+    try {
+      setActing(true);
+      await cancelGrn(grnId, reason);
+      setCancelStepOpen(false);
+      setCancelStepReason("");
+      if (header?.bill_id) {
+        message.success("ยกเลิก GRN แล้ว กลับไปหน้า Bill", 1.2);
+        nav(`/purchase/bill/${header.bill_id}`);
+      } else if (header?.po_id) {
+        message.success("ยกเลิก GRN แล้ว กลับไปหน้า PO", 1.2);
+        nav(`/purchase/po/${header.po_id}`);
+      }
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || "ยกเลิกไม่สำเร็จ", 2);
+    } finally {
+      setActing(false);
+    }
+  }
+
+  const hasPreviousStep = !!(header?.bill_id || header?.po_id);
+  const prevStepLabel = header?.bill_id
+    ? `Bill #${header.bill_id}`
+    : header?.po_id
+      ? `PO #${header.po_id}`
+      : "";
+
   const vendorText = header?.vendor_name ? header.vendor_name : header?.vendor_id ?? "-";
   const whText = header?.warehouse_name ? header.warehouse_name : header?.warehouse_id ?? "-";
 
@@ -164,6 +199,11 @@ export default function GrnDetailPage() {
             <Button danger onClick={() => setCancelOpen(true)} disabled={!canCancel || acting}>
               Cancel
             </Button>
+            {hasPreviousStep && (
+              <Button danger onClick={() => setCancelStepOpen(true)} disabled={!canCancel || acting}>
+                Cancel Step
+              </Button>
+            )}
           </Space>
         </div>
 
@@ -340,6 +380,29 @@ export default function GrnDetailPage() {
           rows={4}
           value={cancelReason}
           onChange={(e) => setCancelReason(e.target.value)}
+          placeholder="เหตุผล (อย่างน้อย 5 ตัวอักษร)"
+        />
+      </Modal>
+
+      <Modal
+        open={cancelStepOpen}
+        title={`Cancel Step — ยกเลิก GRN และกลับสู่ ${prevStepLabel}`}
+        okText="ยืนยันยกเลิก Step"
+        okButtonProps={{ danger: true, loading: acting }}
+        onOk={onCancelStep}
+        centered
+        onCancel={() => {
+          setCancelStepOpen(false);
+          setCancelStepReason("");
+        }}
+      >
+        <p className="mb-3 text-gray-600">
+          GRN นี้จะถูกยกเลิก และระบบจะพาคุณกลับไปหน้า {prevStepLabel}
+        </p>
+        <Input.TextArea
+          rows={4}
+          value={cancelStepReason}
+          onChange={(e) => setCancelStepReason(e.target.value)}
           placeholder="เหตุผล (อย่างน้อย 5 ตัวอักษร)"
         />
       </Modal>
