@@ -125,15 +125,16 @@ export default function GrnListPage() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <Title level={3} className="!mb-1">ใบรายการรับสินค้าเข้าคลัง</Title>
+          <Title level={3} className="!mb-1">
+            ใบรายการรับสินค้าเข้าคลัง
+          </Title>
           <Text type="secondary">รายการรับสินค้าเข้า (Goods Receipt Note)</Text>
         </div>
 
         <Space>
-         
-<Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
-              Refresh
-            </Button>
+          <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
+            Refresh
+          </Button>
           <Button type="primary" onClick={() => nav("/purchase/grn/new")}>
             สร้าง GRN
           </Button>
@@ -150,13 +151,6 @@ export default function GrnListPage() {
               onPressEnter={handleSearch}
               style={{ width: 340 }}
             />
-            <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch} loading={loading}>
-              Search
-            </Button>
-            <Button icon={<CloseOutlined />} onClick={handleClearSearch} disabled={!q && !searchQuery}>
-              Clear
-            </Button>
-
             <Select
               value={status}
               onChange={(v) => {
@@ -171,6 +165,21 @@ export default function GrnListPage() {
                 { value: "CANCELLED", label: "CANCELLED" },
               ]}
             />
+            <Button
+              type="primary"
+              icon={<SearchOutlined />}
+              onClick={handleSearch}
+              loading={loading}
+            >
+              Search
+            </Button>
+            <Button
+              icon={<CloseOutlined />}
+              onClick={handleClearSearch}
+              disabled={!q && !searchQuery}
+            >
+              Clear
+            </Button>
           </Space>
         </div>
       </Card>
@@ -182,7 +191,7 @@ export default function GrnListPage() {
           columns={columns}
           dataSource={rows}
           onChange={onTableChange}
-          scroll={{ x: 'max-content' }}
+          scroll={{ x: "max-content" }}
           pagination={{
             current: page,
             pageSize,

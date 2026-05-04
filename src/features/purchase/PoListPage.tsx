@@ -220,13 +220,6 @@ export default function PoListPage() {
             onPressEnter={handleSearch}
             style={{ width: 340 }}
           />
-          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch} loading={isLoading}>
-            Search
-          </Button>
-          <Button icon={<CloseOutlined />} onClick={handleClearSearch} disabled={!q && !searchQuery}>
-            Clear
-          </Button>
-
           <Select
             value={status}
             onChange={(v) => {
@@ -241,6 +234,12 @@ export default function PoListPage() {
               { value: "CANCELLED", label: "CANCELLED" },
             ]}
           />
+          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch} loading={isLoading}>
+            Search
+          </Button>
+          <Button icon={<CloseOutlined />} onClick={handleClearSearch} disabled={!q && !searchQuery}>
+            Clear
+          </Button>
         </Space>
       </Card>
 
