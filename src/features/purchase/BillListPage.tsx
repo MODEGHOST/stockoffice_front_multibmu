@@ -5,7 +5,7 @@ import { Button, Card, Input, Select, Space, Table, Tag, Typography, message } f
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate } from "react-router-dom";
 import { listBill, type BillListRow, type BillStatus } from "./purchaseApi";
-import { ReloadOutlined } from "@ant-design/icons";
+import { CloseOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 
 const { Title, Text } = Typography;
 
@@ -15,10 +15,19 @@ function statusTag(s: BillStatus) {
   return <Tag color="gold">DRAFT</Tag>;
 }
 
+function normalizeSearchQuery(value: string) {
+  const trimmed = value.trim();
+  if (/^[\d,.]+$/.test(trimmed)) {
+    return trimmed.replace(/,/g, "");
+  }
+  return trimmed;
+}
+
 export default function BillListPage() {
   const nav = useNavigate();
 
   const [q, setQ] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [status, setStatus] = useState<"" | BillStatus>("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -30,7 +39,7 @@ export default function BillListPage() {
   async function load() {
     try {
       setLoading(true);
-      const r = await listBill({ q: q.trim() || undefined, status, page, pageSize });
+      const r = await listBill({ q: searchQuery || undefined, status, page, pageSize });
       setRows(Array.isArray(r?.rows) ? r.rows : []);
       setTotal(Number(r?.total || 0));
     } catch (e: any) {
@@ -43,7 +52,7 @@ export default function BillListPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize]);
+  }, [searchQuery, status, page, pageSize]);
 
   const columns: ColumnsType<BillListRow> = useMemo(
     () => [
@@ -116,6 +125,17 @@ export default function BillListPage() {
     }
   };
 
+  function handleSearch() {
+    setSearchQuery(normalizeSearchQuery(q));
+    setPage(1);
+  }
+
+  function handleClearSearch() {
+    setQ("");
+    setSearchQuery("");
+    setPage(1);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -141,13 +161,16 @@ export default function BillListPage() {
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            onPressEnter={handleSearch}
             placeholder="ค้นหา: bill_no / tax_invoice_no / vendor"
             style={{ width: 320 }}
-            allowClear
           />
           <Select
             value={status}
-            onChange={(v) => setStatus(v)}
+            onChange={(v) => {
+              setStatus(v);
+              setPage(1);
+            }}
             style={{ width: 180 }}
             options={[
               { value: "", label: "ทุกสถานะ" },
@@ -157,14 +180,15 @@ export default function BillListPage() {
             ]}
           />
           <Button
-            onClick={() => {
-              setPage(1);
-              load();
-            }}
+            icon={<SearchOutlined />}
+            onClick={handleSearch}
             type="primary"
             loading={loading}
           >
-            ค้นหา
+            Search
+          </Button>
+          <Button icon={<CloseOutlined />} onClick={handleClearSearch} disabled={!q && !searchQuery}>
+            Clear
           </Button>
         </div>
       </Card>

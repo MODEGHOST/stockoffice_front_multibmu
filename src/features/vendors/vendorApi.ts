@@ -143,7 +143,7 @@ export type VendorDetail = VendorRow & {
 };
 
 export type VendorUpsert = {
-  code: string;
+  code?: string;
   name: string;
   type?: "VENDOR" | "CUSTOMER" | "BOTH" | null;
 
@@ -227,4 +227,9 @@ export async function updateVendor(id: number, payload: VendorUpsert) {
 export async function setVendorActive(id: number, is_active: number) {
   const { data } = await api.patch(`/vendors/${id}/active`, { is_active });
   return data;
+}
+
+export async function getNextVendorCode(type: "VENDOR" | "CUSTOMER" | "BOTH" = "VENDOR"): Promise<string> {
+  const { data } = await api.get("/vendors/next-code", { params: { type } });
+  return data?.code || "";
 }

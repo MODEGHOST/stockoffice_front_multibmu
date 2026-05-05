@@ -9,7 +9,6 @@ import {
   InputNumber,
   Select,
   Space,
-  Switch,
   Typography,
   message,
   Divider,
@@ -20,6 +19,7 @@ import { useNavigate } from "react-router-dom";
 import api from "../../lib/api";
 import {
   createPo,
+  getNextPoNo,
   listProducts,
   listVendors,
   listWarehouses,
@@ -115,6 +115,7 @@ export default function PoCreatePage() {
 
   // AUTO by default
   const [autoNo, setAutoNo] = useState(true);
+  const [poNoLoading, setPoNoLoading] = useState(false);
 
   // vendor people
   const [vendorPeople, setVendorPeople] = useState<VendorPerson[]>([]);
@@ -181,6 +182,50 @@ export default function PoCreatePage() {
     loadMaster();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function loadNextPoNo(issueDateValue?: any) {
+    const d = dayjs(issueDateValue || form.getFieldValue("issue_date") || dayjs());
+    if (!d.isValid()) return;
+
+    try {
+      setPoNoLoading(true);
+      const next = await getNextPoNo(d.format("YYYY-MM-DD"));
+      if (!next?.po_no) throw new Error("PO number not found");
+      setAutoNo(true);
+      form.setFieldsValue({ po_no: next.po_no });
+    } catch {
+      setAutoNo(false);
+      form.setFieldsValue({ po_no: "" });
+      message.warning("ระบบ gen เลขที่ PO ไม่ได้ กรุณากรอกเลขที่ PO เอง", 2);
+    } finally {
+      setPoNoLoading(false);
+    }
+  }
+
+  const issueDateWatcher = Form.useWatch("issue_date", form);
+  const expectedDateWatcher = Form.useWatch("expected_date", form);
+
+  useEffect(() => {
+    if (!issueDateWatcher) return;
+    loadNextPoNo(issueDateWatcher);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issueDateWatcher]);
+
+  useEffect(() => {
+    if (!issueDateWatcher || !expectedDateWatcher) return;
+
+    const issueDate = dayjs(issueDateWatcher).startOf("day");
+    const expectedDate = dayjs(expectedDateWatcher).startOf("day");
+
+    if (expectedDate.isBefore(issueDate)) {
+      form.setFieldsValue({ expected_date: null });
+    }
+  }, [form, issueDateWatcher, expectedDateWatcher]);
+
+  function disableExpectedDate(current: dayjs.Dayjs) {
+    if (!current || !issueDateWatcher) return false;
+    return current.startOf("day").isBefore(dayjs(issueDateWatcher).startOf("day"));
+  }
 
   function normalizePoNo(v: any) {
     if (v === undefined || v === null) return null;
@@ -304,10 +349,10 @@ export default function PoCreatePage() {
   const extraChargeBaseAmount = useMemo(() => {
     return calculateSummary(lines, {
       extra_charge_amt: 0,
-      header_discount_type: headerDiscountType,
-      header_discount_value: headerDiscountValue,
-    }).grandTotal;
-  }, [lines, headerDiscountType, headerDiscountValue]);
+      header_discount_type: "AMOUNT",
+      header_discount_value: 0,
+    }).net;
+  }, [lines]);
 
   function calcExtraChargeAmount(
     value: number | string | null | undefined,
@@ -524,23 +569,6 @@ export default function PoCreatePage() {
       <Form form={form} layout="vertical">
         <Card loading={loading}>
           <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-            <Form.Item label="รูปแบบเลขเอกสาร" className="md:col-span-2">
-              <Space>
-                <Switch
-                  checked={autoNo}
-                  onChange={(checked) => {
-                    setAutoNo(checked);
-                    if (checked) form.setFieldsValue({ po_no: "" });
-                  }}
-                  checkedChildren="AUTO"
-                  unCheckedChildren="MANUAL"
-                />
-                <Text type="secondary">
-                  {autoNo ? "ปล่อยว่าง ระบบรันเลขให้" : "กรอกเลขเอง"}
-                </Text>
-              </Space>
-            </Form.Item>
-
             <Form.Item
               name="po_no"
               label="เลขที่ PO"
@@ -556,12 +584,15 @@ export default function PoCreatePage() {
                     ]
               }
               extra={
-                autoNo ? "โหมด AUTO: ระบบจะสร้างเลขให้เมื่อบันทึก" : undefined
+                autoNo
+                  ? "ระบบ gen เลขให้ตามวันที่ออกเอกสาร และจะล็อกช่องนี้ไว้"
+                  : "ระบบ gen ไม่ได้ กรุณากรอกเลขที่ PO เอง"
               }
             >
               <Input
-                placeholder={autoNo ? "AUTO" : "เช่น PO-2026-0001"}
+                placeholder={autoNo ? "กำลัง gen เลขที่ PO" : "เช่น PO202604-0005"}
                 disabled={autoNo}
+                suffix={poNoLoading ? "..." : autoNo ? "AUTO" : "MANUAL"}
               />
             </Form.Item>
 
@@ -579,7 +610,11 @@ export default function PoCreatePage() {
               label="วันที่คาดว่าจะรับเข้า"
               className="md:col-span-1"
             >
-              <DatePicker className="w-full" format="DD/MM/YYYY" />
+              <DatePicker
+                className="w-full"
+                format="DD/MM/YYYY"
+                disabledDate={disableExpectedDate}
+              />
             </Form.Item>
 
             {/* Vendor */}
@@ -802,6 +837,8 @@ export default function PoCreatePage() {
                           value={l.qty}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           onChange={(val) =>
                             setLine(l.key, { qty: Number(val || 0) })
                           }
@@ -818,6 +855,8 @@ export default function PoCreatePage() {
                           value={l.unit_cost}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           onChange={(val) =>
                             setLine(l.key, { unit_cost: Number(val ?? 0) })
                           }
@@ -838,6 +877,8 @@ export default function PoCreatePage() {
                           value={l.discount_pct}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           onChange={(val) =>
                             setLine(l.key, { discount_pct: Number(val ?? 0) })
                           }
@@ -854,6 +895,8 @@ export default function PoCreatePage() {
                           value={l.discount_amt}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           onChange={(val) =>
                             setLine(l.key, { discount_amt: Number(val ?? 0) })
                           }
@@ -898,6 +941,8 @@ export default function PoCreatePage() {
                           precision={2}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           value={
                             l.manual_vat !== undefined &&
                             l.manual_vat !== null &&
@@ -1058,6 +1103,10 @@ export default function PoCreatePage() {
                     })
                   }
                 />
+                <div className="flex justify-between mt-1 text-xs text-gray-400">
+                  <div>คิดเป็นเงิน</div>
+                  <div>{summary.headerDiscount.toLocaleString()}</div>
+                </div>
               </div>
 
               <Divider className="!my-2" />

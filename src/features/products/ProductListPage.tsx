@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Button,
@@ -15,7 +15,15 @@ import {
   message,
 } from "antd";
 import type { TableProps } from "antd/es/table";
-import { PlusOutlined, ReloadOutlined, EditOutlined, QrcodeOutlined, PrinterOutlined } from "@ant-design/icons";
+import {
+  PlusOutlined,
+  ReloadOutlined,
+  EditOutlined,
+  QrcodeOutlined,
+  PrinterOutlined,
+  SearchOutlined,
+  CloseOutlined,
+} from "@ant-design/icons";
 import { useReactToPrint } from "react-to-print";
 import { ProductQRCodePrint } from "./ProductQRCodePrint";
 import ProductUnitAutocomplete from "./ProductUnitAutocomplete";
@@ -68,15 +76,6 @@ export default function ProductListPage() {
     documentTitle: printRow ? `QR_${printRow.code}` : "QRCode",
   });
 
-  // Debounce search
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setSearchQuery(q);
-      setPage(1);
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [q]);
-
   // Fetch Data using React Query
   const { data, isLoading, refetch } = useQuery({
     queryKey: [...QUERY_KEY, searchQuery, page, pageSize, sortKey, sortOrder],
@@ -86,6 +85,17 @@ export default function ProductListPage() {
 
   const rows = data?.rows || [];
   const total = data?.total || 0;
+
+  function handleSearch() {
+    setSearchQuery(q.trim());
+    setPage(1);
+  }
+
+  function handleClearSearch() {
+    setQ("");
+    setSearchQuery("");
+    setPage(1);
+  }
 
   function updateCanSubmit() {
     const values = form.getFieldsValue();
@@ -304,9 +314,15 @@ export default function ProductListPage() {
             placeholder="ค้นหา code / ชื่อ"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            allowClear
+            onPressEnter={handleSearch}
             style={{ width: 240 }}
           />
+          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch} loading={isLoading}>
+            Search
+          </Button>
+          <Button icon={<CloseOutlined />} onClick={handleClearSearch} disabled={!q && !searchQuery}>
+            Clear
+          </Button>
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isLoading}>
             Refresh
           </Button>

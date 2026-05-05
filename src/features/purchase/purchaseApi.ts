@@ -122,7 +122,7 @@ export type GrnDetail = {
 };
 
 export type CreateGrnPayload = {
-  grn_no: string;
+  grn_no?: string | null;
   po_id?: number | null;
   bill_id?: number | null;
 
@@ -149,6 +149,13 @@ export type CreateGrnPayload = {
 
 export async function createGrn(payload: CreateGrnPayload): Promise<{ id: number }> {
   const { data } = await api.post("/purchase/grn", payload);
+  return data;
+}
+
+export async function getNextGrnNo(issueDate?: string): Promise<{ grn_no: string }> {
+  const { data } = await api.get("/purchase/grn/next-no", {
+    params: issueDate ? { issue_date: issueDate } : undefined,
+  });
   return data;
 }
 
@@ -336,6 +343,13 @@ export async function listPo(params?: {
   return data;
 }
 
+export async function getNextPoNo(issueDate?: string): Promise<{ po_no: string }> {
+  const { data } = await api.get("/purchase/po/next-no", {
+    params: issueDate ? { issue_date: issueDate } : undefined,
+  });
+  return data;
+}
+
 export async function createPo(payload: CreatePoPayload): Promise<{ id: number; po_no?: string }> {
   const { data } = await api.post("/purchase/po", payload);
   return data;
@@ -409,8 +423,8 @@ export type BillDetail = {
 };
 
 export type CreateBillPayload = {
-  bill_no: string;
-  tax_invoice_no: string;
+  bill_no?: string | null;
+  tax_invoice_no?: string | null;
   po_id?: number | null;
 
   vendor_id: number;
@@ -473,6 +487,13 @@ export async function listBill(params?: {
 
 export async function createBill(payload: CreateBillPayload): Promise<{ id: number }> {
   const { data } = await api.post("/purchase/bill", payload);
+  return data;
+}
+
+export async function getNextBillNos(issueDate?: string): Promise<{ bill_no: string; tax_invoice_no: string }> {
+  const { data } = await api.get("/purchase/bill/next-no", {
+    params: issueDate ? { issue_date: issueDate } : undefined,
+  });
   return data;
 }
 

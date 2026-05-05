@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { Button, Card, Input, Select, Space, Table, Tag, Typography, message } from "antd";
+import { useState } from "react";
+import { Button, Card, Input, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType, TableProps } from "antd/es/table";
 import { useNavigate } from "react-router-dom";
 import { listPo, type PoListRow } from "./purchaseApi";
 import { useQuery } from "@tanstack/react-query";
-import { ReloadOutlined } from "@ant-design/icons";
+import { CloseOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 
 const { Title, Text } = Typography;
@@ -38,14 +38,6 @@ export default function PoListPage() {
   const [sortKey, setSortKey] = useState<"" | "po_no" | "vendor_name" | "warehouse_name" | "status" | "issue_date" | "expected_date" | "days_left">("");
   const [sortOrder, setSortOrder] = useState<"" | "asc" | "desc">("");
 
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setSearchQuery(q);
-      setPage(1);
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [q]);
-
   const { data, isLoading, refetch } = useQuery({
     queryKey: [...QUERY_KEY, searchQuery, status, page, pageSize, sortKey, sortOrder],
     queryFn: async () => {
@@ -64,6 +56,17 @@ export default function PoListPage() {
   const rows = Array.isArray(data?.rows) ? data.rows : [];
   const total = Number(data?.total || 0);
 
+  function handleSearch() {
+    setSearchQuery(q.trim());
+    setPage(1);
+  }
+
+  function handleClearSearch() {
+    setQ("");
+    setSearchQuery("");
+    setPage(1);
+  }
+
   const columns: ColumnsType<PoListRow> = [
     {
       title: "PO No",
@@ -71,6 +74,11 @@ export default function PoListPage() {
       key: "po_no",
       width: 170,
       sorter: true,
+      render: (v, r) => (
+        <Button type="link" onClick={() => nav(`/purchase/po/${r.id}`)} style={{ padding: 0 }}>
+          {v}
+        </Button>
+      ),
     },
     {
       title: "สถานะ",
@@ -213,13 +221,10 @@ export default function PoListPage() {
           <Input
             placeholder="ค้นหา PO No / Vendor / Warehouse"
             value={q}
-            onChange={(e) => {
-              setQ(e.target.value);
-            }}
-            allowClear
+            onChange={(e) => setQ(e.target.value)}
+            onPressEnter={handleSearch}
             style={{ width: 340 }}
           />
-
           <Select
             value={status}
             onChange={(v) => {
@@ -234,6 +239,12 @@ export default function PoListPage() {
               { value: "CANCELLED", label: "CANCELLED" },
             ]}
           />
+          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch} loading={isLoading}>
+            Search
+          </Button>
+          <Button icon={<CloseOutlined />} onClick={handleClearSearch} disabled={!q && !searchQuery}>
+            Clear
+          </Button>
         </Space>
       </Card>
 

@@ -23,10 +23,18 @@ import {
 import type { ColumnsType, TableProps } from "antd/es/table";
 import dayjs from "dayjs";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import {
+  PlusOutlined,
+  ReloadOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  SearchOutlined,
+  CloseOutlined,
+} from "@ant-design/icons";
 import {
   createVendor,
   getVendor,
+  getNextVendorCode,
   listVendors,
   setVendorActive,
   updateVendor,
@@ -181,6 +189,36 @@ type FormValues = {
 function compactStr(v: any) {
   const s = String(v ?? "").trim();
   return s.length ? s : "";
+}
+
+function isValidThaiNationalId(value?: string | null) {
+  const taxId = compactStr(value);
+  if (!taxId) return true;
+  if (!/^\d{13}$/.test(taxId)) return false;
+
+  const sum = taxId
+    .slice(0, 12)
+    .split("")
+    .reduce((total, digit, index) => total + Number(digit) * (13 - index), 0);
+  const checkDigit = (11 - (sum % 11)) % 10;
+
+  return checkDigit === Number(taxId[12]);
+}
+
+function numericOnlyProps(maxLength?: number) {
+  return {
+    maxLength,
+    inputMode: "numeric" as const,
+    onKeyDown: (e: any) => {
+      const allowedKeys = ["Backspace", "Delete", "Tab", "ArrowLeft", "ArrowRight", "Home", "End"];
+      if (allowedKeys.includes(e.key) || e.metaKey || e.ctrlKey) return;
+      if (!/^[0-9]$/.test(e.key)) e.preventDefault();
+    },
+    onPaste: (e: any) => {
+      const text = e.clipboardData.getData("text");
+      if (!/^[0-9]+$/.test(text)) e.preventDefault();
+    },
+  };
 }
 
 function splitFullName(full: string): { first: string; last: string | null } {
@@ -372,16 +410,10 @@ export default function VendorListPage() {
   const [activeTab, setActiveTab] = useState<string>("business");
   const [editing, setEditing] = useState<VendorRow | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loadingNextCode, setLoadingNextCode] = useState(false);
+  const [duplicateTaxIdError, setDuplicateTaxIdError] = useState(false);
 
   const [form] = Form.useForm<FormValues>();
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setSearchQuery(q);
-      setPage(1);
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [q]);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: [...QUERY_KEY, searchQuery, page, pageSize, sortKey, sortOrder],
@@ -391,6 +423,17 @@ export default function VendorListPage() {
 
   const rows = data?.rows || [];
   const total = data?.total || 0;
+
+  function handleSearch() {
+    setSearchQuery(q.trim());
+    setPage(1);
+  }
+
+  function handleClearSearch() {
+    setQ("");
+    setSearchQuery("");
+    setPage(1);
+  }
 
   const onTableChange: TableProps<VendorRow>["onChange"] = (pagination, _filters, sorter) => {
     setPage(pagination.current || 1);
@@ -429,15 +472,37 @@ export default function VendorListPage() {
     }
   }
 
-  function openCreate() {
+  function showDuplicateTaxIdError(messageText: string) {
+    setActiveTab("business");
+    form.setFields([{ name: ["business", "tax_no_13"], errors: [messageText] }]);
+    setDuplicateTaxIdError(false);
+    window.requestAnimationFrame(() => setDuplicateTaxIdError(true));
+  }
+
+  async function loadNextVendorCode(type: "VENDOR" | "CUSTOMER" | "BOTH" = "VENDOR") {
+    try {
+      setLoadingNextCode(true);
+      const code = await getNextVendorCode(type);
+      form.setFieldValue("code", code);
+    } catch (e) {
+      console.error(e);
+      message.warning("โหลดรหัสผู้ขายถัดไปไม่สำเร็จ ระบบจะสร้างให้ตอนบันทึก", 2);
+    } finally {
+      setLoadingNextCode(false);
+    }
+  }
+
+  async function openCreate() {
     setEditing(null);
     setActiveTab("business");
+    setDuplicateTaxIdError(false);
     form.resetFields();
 
     const defaultLegalForm: LegalFormCode = "company_limited";
     const ps = deriveJuristicPrefixSuffix(defaultLegalForm);
 
     form.setFieldsValue({
+      code: "",
       is_active: true,
       type: "VENDOR",
       business: {
@@ -468,6 +533,8 @@ export default function VendorListPage() {
     });
 
     setOpen(true);
+
+    loadNextVendorCode("VENDOR");
   }
 
   function detailToForm(detail: VendorDetail) {
@@ -634,6 +701,7 @@ export default function VendorListPage() {
   async function openEdit(row: VendorRow) {
     setEditing(row);
     setActiveTab("business");
+    setDuplicateTaxIdError(false);
     setOpen(true);
     setSaving(true);
     try {
@@ -883,6 +951,7 @@ export default function VendorListPage() {
     try {
       const fullValues = form.getFieldsValue(true) as FormValues;
       const payload = normalizePayload(fullValues);
+      if (!editing) delete payload.code;
 
       if ((payload.contacts?.length || 0) > 5) return message.error("ช่องทางติดต่อรวมได้ไม่เกิน 5", 2);
       if ((payload.bank_accounts?.length || 0) > 5) return message.error("ข้อมูลธนาคารได้ไม่เกิน 5 รายการ", 2);
@@ -912,9 +981,14 @@ export default function VendorListPage() {
       }
 
       setOpen(false);
+      setDuplicateTaxIdError(false);
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
     } catch (e: any) {
-      message.error(e?.response?.data?.message || "บันทึกไม่สำเร็จ", 2);
+      const errorMessage = e?.response?.data?.message || "บันทึกไม่สำเร็จ";
+      if (String(errorMessage).includes("มีเลขทะเบียน") && String(errorMessage).includes("อยู่ในระบบแล้ว")) {
+        showDuplicateTaxIdError(errorMessage);
+      }
+      message.error(errorMessage, 2);
     } finally {
       setSaving(false);
     }
@@ -1078,7 +1152,19 @@ export default function VendorListPage() {
         </div>
 
         <Space>
-          <Input placeholder="ค้นหา รหัส/ชื่อ/Tax/เบอร์/อีเมล" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 360 }} allowClear />
+          <Input
+            placeholder="ค้นหา รหัส/ชื่อ/Tax/เบอร์/อีเมล"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onPressEnter={handleSearch}
+            style={{ width: 360 }}
+          />
+          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch} loading={isLoading}>
+            Search
+          </Button>
+          <Button icon={<CloseOutlined />} onClick={handleClearSearch} disabled={!q && !searchQuery}>
+            Clear
+          </Button>
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isLoading}>
             รีเฟรช
           </Button>
@@ -1111,6 +1197,7 @@ export default function VendorListPage() {
         onCancel={() => {
           setOpen(false);
           setEditing(null);
+          setDuplicateTaxIdError(false);
           setActiveTab("business");
           form.resetFields();
         }}
@@ -1120,12 +1207,17 @@ export default function VendorListPage() {
         destroyOnClose
         centered
         width={1040}
+        className={duplicateTaxIdError ? "vendor-duplicate-tax-modal" : undefined}
       >
         <Form
           form={form}
           layout="vertical"
           onFinish={submit}
           onValuesChange={(changed) => {
+            if (changed.business && "tax_no_13" in changed.business) {
+              setDuplicateTaxIdError(false);
+              form.setFields([{ name: ["business", "tax_no_13"], errors: [] }]);
+            }
             if ("extra_contacts" in changed) ensureOnePrimaryExtraContacts();
             if ("bank_accounts" in changed) ensureOneDefaultBank();
           }}
@@ -1139,8 +1231,11 @@ export default function VendorListPage() {
                 label: "ข้อมูลกิจการ",
                 children: (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Form.Item name="code" label="รหัสผู้ขาย" rules={[{ required: true, message: "กรอกรหัสผู้ขาย" }]}>
-                      <Input placeholder="เช่น V-001" />
+                    <Form.Item name="code" label="รหัสผู้ขาย">
+                      <Input
+                        disabled
+                        placeholder={loadingNextCode ? "กำลังโหลดรหัสผู้ขาย..." : "ระบบสร้างให้อัตโนมัติ"}
+                      />
                     </Form.Item>
 
                     <Form.Item name="is_active" label="สถานะ" valuePropName="checked">
@@ -1151,10 +1246,16 @@ export default function VendorListPage() {
                       name={["business", "tax_no_13"]} 
                       label="เลขทะเบียน 13 หลัก"
                       rules={[
-                        { pattern: /^[0-9]{13}$/, message: "เลขประจำตัวผู้เสียภาษีต้องเป็นตัวเลข 13 หลัก" }
+                        { pattern: /^[0-9]{13}$/, message: "เลขทะเบียนต้องเป็นตัวเลข 13 หลัก" },
+                        {
+                          validator: (_, value) =>
+                            isValidThaiNationalId(value)
+                              ? Promise.resolve()
+                              : Promise.reject(new Error("เลขทะเบียน 13 หลักไม่ถูกต้อง")),
+                        },
                       ]}
                     >
-                      <Input maxLength={13} placeholder="13 หลัก" />
+                      <Input {...numericOnlyProps(13)} placeholder="13 หลัก" />
                     </Form.Item>
 
                     <Form.Item name={["business", "tax_country"]} label="ประเทศเลขทะเบียน">
@@ -1173,7 +1274,11 @@ export default function VendorListPage() {
                     </Form.Item>
 
                     <Form.Item name="type" label="เป็นลูกค้า หรือ ผู้จำหน่าย">
-                      <Radio.Group>
+                      <Radio.Group
+                        onChange={(e) => {
+                          if (!editing) loadNextVendorCode(e.target.value);
+                        }}
+                      >
                         <Radio value="VENDOR">ผู้จำหน่าย (ฝั่งซื้อ)</Radio>
                         <Radio value="CUSTOMER">ลูกค้า (ฝั่งขาย)</Radio>
                         <Radio value="BOTH">ทั้งคู่</Radio>
@@ -1302,7 +1407,7 @@ export default function VendorListPage() {
                       <Input />
                     </Form.Item>
                     <Form.Item name={["registered_address", "postcode"]} label="รหัสไปรษณีย์">
-                      <Input maxLength={10} />
+                      <Input {...numericOnlyProps(10)} />
                     </Form.Item>
                   </div>
                 ),
@@ -1335,7 +1440,7 @@ export default function VendorListPage() {
                         <Input />
                       </Form.Item>
                       <Form.Item name={["shipping_address", "postcode"]} label="รหัสไปรษณีย์">
-                        <Input maxLength={10} />
+                        <Input {...numericOnlyProps(10)} />
                       </Form.Item>
                     </div>
                   </>
@@ -1361,7 +1466,7 @@ export default function VendorListPage() {
                           { pattern: /^[0-9]{9,10}$/, message: "เบอร์โทรศัพท์ต้องเป็นตัวเลข 9-10 หลัก" }
                         ]}
                       >
-                        <Input maxLength={10} placeholder="เบอร์โทรศัพท์สำหรับติดต่อรับของ" />
+                        <Input {...numericOnlyProps(10)} placeholder="เบอร์โทรศัพท์สำหรับติดต่อรับของ" />
                       </Form.Item>
                       <Form.Item className="md:col-span-2" name={["goods_shipping_address", "address"]} label="ที่อยู่">
                         <Input.TextArea rows={3} placeholder="บ้านเลขที่ ซอย ถนน อาคาร ห้องเลขที่ ฯลฯ" />
@@ -1376,7 +1481,7 @@ export default function VendorListPage() {
                         <Input placeholder="จังหวัด" />
                       </Form.Item>
                       <Form.Item name={["goods_shipping_address", "postcode"]} label="รหัสไปรษณีย์">
-                        <Input placeholder="รหัสไปรษณีย์" />
+                        <Input {...numericOnlyProps(10)} placeholder="รหัสไปรษณีย์" />
                       </Form.Item>
                     </div>
                   </>
@@ -1406,13 +1511,13 @@ export default function VendorListPage() {
                           { pattern: /^[0-9]{9,10}$/, message: "เบอร์โทรต้องเป็นตัวเลข 9-10 หลัก" }
                         ]}
                       >
-                        <Input maxLength={10} placeholder="09x-xxx-xxxx" />
+                        <Input {...numericOnlyProps(10)} placeholder="09x-xxx-xxxx" />
                       </Form.Item>
                       <Form.Item name={["contact_channels", "website"]} label="เว็บไซต์">
                         <Input placeholder="www.website.com" />
                       </Form.Item>
                       <Form.Item name={["contact_channels", "fax"]} label="เบอร์แฟกซ์">
-                        <Input placeholder="02-xxx-xxxx" />
+                        <Input {...numericOnlyProps(10)} placeholder="02-xxx-xxxx" />
                       </Form.Item>
                     </div>
 
@@ -1589,7 +1694,7 @@ export default function VendorListPage() {
                               ),
                               children: (
                                 <Card size="small" style={{ borderRadius: 12 }}>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 [&_.ant-form-item]:!mb-2">
                                     <Form.Item name={[f.name, "prefix"]} label="คำนำหน้า">
                                       <Select options={PREFIX_OPTIONS} allowClear placeholder="เลือกคำนำหน้า" />
                                     </Form.Item>
@@ -1645,7 +1750,7 @@ export default function VendorListPage() {
                                         { pattern: /^[0-9]{9,10}$/, message: "เบอร์โทรต้องเป็นตัวเลข 9-10 หลัก" }
                                       ]}
                                     >
-                                      <Input maxLength={10} placeholder="09x-xxx-xxxx" />
+                                      <Input {...numericOnlyProps(10)} placeholder="09x-xxx-xxxx" />
                                     </Form.Item>
 
                                     <Form.Item name={[f.name, "position"]} label="ตำแหน่งงาน">
@@ -1748,7 +1853,7 @@ export default function VendorListPage() {
                                     </Form.Item>
 
                                     <Form.Item className="md:col-span-2" name={[f.name, "branch_code"]} label="เลขที่สาขา">
-                                      <Input maxLength={20} />
+                                      <Input {...numericOnlyProps(20)} />
                                     </Form.Item>
                                   </div>
 
@@ -1815,7 +1920,22 @@ export default function VendorListPage() {
                       </Form.Item>
                     ) : (
                       <Form.Item name={["payment_term", "due_days"]} label="ครบกำหนด (วัน)" initialValue={0}>
-                        <InputNumber className="w-full" min={0} max={3650} />
+                        <InputNumber
+                          className="w-full"
+                          min={0}
+                          max={3650}
+                          controls={false}
+                          inputMode="numeric"
+                          onKeyDown={(e) => {
+                            const allowedKeys = ["Backspace", "Delete", "Tab", "ArrowLeft", "ArrowRight", "Home", "End"];
+                            if (allowedKeys.includes(e.key) || e.metaKey || e.ctrlKey) return;
+                            if (!/^[0-9]$/.test(e.key)) e.preventDefault();
+                          }}
+                          onPaste={(e) => {
+                            const text = e.clipboardData.getData("text");
+                            if (!/^[0-9]+$/.test(text)) e.preventDefault();
+                          }}
+                        />
                       </Form.Item>
                     )}
 

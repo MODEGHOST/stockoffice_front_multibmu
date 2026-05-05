@@ -1,5 +1,5 @@
 // BillCreatePage.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import {
   Button,
   Card,
@@ -13,12 +13,14 @@ import {
   message,
   Divider,
   Tag,
+  Radio,
 } from "antd";
 import dayjs from "dayjs";
 import { useLocation, useNavigate } from "react-router-dom";
 import api from "../../lib/api";
 import {
   createBill,
+  getNextBillNos,
   getPo,
   listProducts,
   listVendors,
@@ -27,7 +29,7 @@ import {
   type VendorRow,
   type WarehouseRow,
 } from "./purchaseApi";
-import { formatComma, parseComma } from "./purchaseUtils";
+import { calculateSummary, formatComma, parseComma } from "./purchaseUtils";
 import { financeApi, type FinanceAccount } from "../finance/financeApi";
 
 const { Title, Text } = Typography;
@@ -70,20 +72,28 @@ function calcLine(l: Line) {
 
   const discByPct = base * (dp / 100);
   const discount = Math.min(base, discByPct + da);
-  const beforeTax = Math.max(0, base - discount);
+  const afterDiscount = Math.max(0, base - discount);
+  const hasManualVat =
+    l.manual_vat !== undefined &&
+    l.manual_vat !== null &&
+    String(l.manual_vat) !== "";
+  const manualVat = hasManualVat ? Number(l.manual_vat) : null;
 
+  let beforeTax = Number(afterDiscount.toFixed(2));
   let vat = 0;
-  let total = beforeTax;
+  let total = Number(afterDiscount.toFixed(2));
 
   if (l.tax_type === "EXCLUDE_VAT_7") {
-    vat = beforeTax * 0.07;
-    total = beforeTax + vat;
+    vat = hasManualVat ? manualVat! : Number((beforeTax * 0.07).toFixed(2));
+    total = Number((beforeTax + vat).toFixed(2));
   }
 
   if (l.tax_type === "INCLUDE_VAT_7") {
-    const net = beforeTax / 1.07;
-    vat = beforeTax - net;
-    total = beforeTax;
+    total = Number(afterDiscount.toFixed(2));
+    vat = hasManualVat
+      ? manualVat!
+      : Number((total - total / 1.07).toFixed(2));
+    beforeTax = Number((total - vat).toFixed(2));
   }
 
   return { qty, base, discount, beforeTax, vat, total };
@@ -112,11 +122,36 @@ function toNum(v: any, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function toTagList(v: any) {
+  if (Array.isArray(v)) return v;
+  return String(v ?? "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+const extraChargeOptions = [
+  "ค่าขนส่ง",
+  "ค่ารถ",
+  "ค่าขนย้าย",
+  "ค่าแรง",
+  "ค่าคนงาน",
+  "ค่าติดตั้ง",
+  "ค่าบริการ",
+  "ค่าธรรมเนียม",
+  "ค่าประกันสินค้า",
+  "ค่าภาษีนำเข้า",
+  "ค่าเอกสาร",
+  "ค่าอื่น ๆ",
+];
+
 export default function BillCreatePage() {
   const nav = useNavigate();
   const location = useLocation();
 
   const [loading, setLoading] = useState(false);
+  const [autoBillNos, setAutoBillNos] = useState(true);
+  const [billNosLoading, setBillNosLoading] = useState(false);
 
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [vendors, setVendors] = useState<VendorRow[]>([]);
@@ -161,6 +196,7 @@ export default function BillCreatePage() {
 
   // Header Discount
   const [headerDiscountType, setHeaderDiscountType] = useState<"PERCENT" | "AMOUNT">("AMOUNT");
+  const [extraChargeType, setExtraChargeType] = useState<"PERCENT" | "AMOUNT">("AMOUNT");
 
   // Finance Accounts
   const [financeAccounts, setFinanceAccounts] = useState<FinanceAccount[]>([]);
@@ -190,6 +226,7 @@ export default function BillCreatePage() {
           warehouse_id: undefined,
           note: null,
           extra_charge_amt: 0,
+          extra_charge_value: 0,
           extra_charge_note: null,
           header_discount_value: 0,
         });
@@ -206,11 +243,9 @@ export default function BillCreatePage() {
             vendor_id: po.header.vendor_id,
             warehouse_id: po.header.warehouse_id,
             note: po.header.note ?? null,
-            // Pre-fill bill/tax no if wanted, but usually manual.
-            bill_no: `BILL-${po.header.po_no}`,
-            tax_invoice_no: `TAX-${po.header.po_no}`,
             extra_charge_amt: Number(po.header.extra_charge_amt ?? 0),
-            extra_charge_note: po.header.extra_charge_note,
+            extra_charge_value: Number(po.header.extra_charge_amt ?? 0),
+            extra_charge_note: toTagList(po.header.extra_charge_note),
             header_discount_value: Number((po.header as any).header_discount_value ?? 0),
           });
 
@@ -258,6 +293,38 @@ export default function BillCreatePage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poId]);
+
+  async function loadNextBillNos(issueDateValue?: any) {
+    const d = dayjs(issueDateValue || form.getFieldValue("issue_date") || dayjs());
+    if (!d.isValid()) return;
+
+    try {
+      setBillNosLoading(true);
+      const next = await getNextBillNos(d.format("YYYY-MM-DD"));
+      if (!next?.bill_no || !next?.tax_invoice_no) {
+        throw new Error("Bill number not found");
+      }
+      setAutoBillNos(true);
+      form.setFieldsValue({
+        bill_no: next.bill_no,
+        tax_invoice_no: next.tax_invoice_no,
+      });
+    } catch {
+      setAutoBillNos(false);
+      form.setFieldsValue({ bill_no: "", tax_invoice_no: "" });
+      message.warning("ระบบ gen เลขที่ Bill/Tax ไม่ได้ กรุณากรอกเอง", 2);
+    } finally {
+      setBillNosLoading(false);
+    }
+  }
+
+  const issueDateWatcher = Form.useWatch("issue_date", form);
+
+  useEffect(() => {
+    if (!issueDateWatcher) return;
+    loadNextBillNos(issueDateWatcher);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issueDateWatcher]);
 
   async function loadVendorPeople(vendorId: number) {
     setLoadingPeople(true);
@@ -309,51 +376,124 @@ export default function BillCreatePage() {
   }, [vendorIdSelector]);
 
   // Calculations
+  const extraChargeValue = Form.useWatch("extra_charge_value", form);
   const extraChargeAmt = Form.useWatch("extra_charge_amt", form);
   const headerDiscountValue = Form.useWatch("header_discount_value", form);
 
   const summary = useMemo(() => {
-    let totalQty = 0;
-    let base = 0;
-    let discount = 0;
-    let netBeforeVat = 0;
-    let vatTotal = 0;
+    return calculateSummary(lines, {
+      extra_charge_amt: extraChargeAmt,
+      header_discount_type: headerDiscountType,
+      header_discount_value: headerDiscountValue,
+    });
+  }, [lines, extraChargeAmt, headerDiscountValue, headerDiscountType]);
 
-    for (const l of lines) {
-      const r = calcLine(l);
-      totalQty += r.qty;
-      base += r.base;
-      discount += r.discount;
-      netBeforeVat += r.beforeTax;
-      vatTotal += r.vat;
+  const extraChargeBaseAmount = useMemo(() => {
+    return calculateSummary(lines, {
+      extra_charge_amt: 0,
+      header_discount_type: "AMOUNT",
+      header_discount_value: 0,
+    }).net;
+  }, [lines]);
+
+  function calcExtraChargeAmount(
+    value: number | string | null | undefined,
+    type = extraChargeType,
+  ) {
+    const n = Number(value ?? 0);
+    const safeValue = Number.isFinite(n) ? n : 0;
+    const max = type === "PERCENT" ? 100 : extraChargeBaseAmount;
+    const normalizedValue = Math.min(Math.max(safeValue, 0), max);
+    return type === "PERCENT"
+      ? Number(((extraChargeBaseAmount * normalizedValue) / 100).toFixed(2))
+      : normalizedValue;
+  }
+
+  function normalizeExtraChargeValue(
+    value: number | string | null | undefined,
+    type = extraChargeType,
+  ) {
+    const n = Number(value ?? 0);
+    const safeValue = Number.isFinite(n) ? n : 0;
+    const max = type === "PERCENT" ? 100 : extraChargeBaseAmount;
+    return Math.min(Math.max(safeValue, 0), max);
+  }
+
+  function preventNonNumericKey(e: KeyboardEvent<HTMLInputElement>) {
+    if (
+      e.ctrlKey ||
+      e.metaKey ||
+      [
+        "Backspace",
+        "Delete",
+        "ArrowLeft",
+        "ArrowRight",
+        "ArrowUp",
+        "ArrowDown",
+        "Home",
+        "End",
+        "Tab",
+        "Enter",
+      ].includes(e.key)
+    ) {
+      return;
     }
 
-    const extra = Number(extraChargeAmt ?? 0) || 0;
-    const headerVal = Number(headerDiscountValue ?? 0) || 0;
+    if (!/^[0-9.]$/.test(e.key)) {
+      e.preventDefault();
+      return;
+    }
 
-    const totalBeforeHeaderDiscount = netBeforeVat + vatTotal + extra;
+    const target = e.currentTarget;
+    if (e.key === "." && target.value.includes(".")) {
+      e.preventDefault();
+    }
+  }
 
-    let headerDiscount =
-      headerDiscountType === "PERCENT"
-        ? totalBeforeHeaderDiscount * (headerVal / 100)
-        : headerVal;
+  function preventNonNumericPaste(e: ClipboardEvent<HTMLInputElement>) {
+    const text = e.clipboardData.getData("text").replace(/,/g, "").trim();
+    if (!/^\d*\.?\d*$/.test(text)) {
+      e.preventDefault();
+    }
+  }
 
-    headerDiscount = Math.min(totalBeforeHeaderDiscount, headerDiscount);
+  function setExtraChargeValue(value: number | string | null | undefined) {
+    const normalizedValue = normalizeExtraChargeValue(value);
+    form.setFieldsValue({
+      extra_charge_value: normalizedValue,
+      extra_charge_amt: calcExtraChargeAmount(normalizedValue),
+    });
+  }
 
-    const grandTotal = totalBeforeHeaderDiscount - headerDiscount;
+  function handleExtraChargeTypeChange(type: "PERCENT" | "AMOUNT") {
+    setExtraChargeType(type);
+    const normalizedValue = normalizeExtraChargeValue(
+      form.getFieldValue("extra_charge_value"),
+      type,
+    );
+    form.setFieldsValue({
+      extra_charge_value: normalizedValue,
+      extra_charge_amt: calcExtraChargeAmount(normalizedValue, type),
+    });
+  }
 
-    return {
-      lineCount: lines.length,
-      totalQty,
-      base,
-      discount,
-      net: netBeforeVat,
-      vat: vatTotal,
-      headerDiscount,
-      extra,
-      grandTotal,
-    };
-  }, [lines, extraChargeAmt, headerDiscountValue, headerDiscountType]);
+  useEffect(() => {
+    const current = Number(extraChargeValue ?? 0);
+    const normalizedValue = normalizeExtraChargeValue(current);
+    const amount = calcExtraChargeAmount(normalizedValue);
+    if (current !== normalizedValue || Number(extraChargeAmt ?? 0) !== amount) {
+      form.setFieldsValue({
+        extra_charge_value: normalizedValue,
+        extra_charge_amt: amount,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    extraChargeType,
+    extraChargeBaseAmount,
+    extraChargeValue,
+    extraChargeAmt,
+  ]);
 
   const productOptions = useMemo(
     () => products.map((p) => ({ value: p.id, label: `${p.code} - ${p.name}` })),
@@ -439,8 +579,8 @@ export default function BillCreatePage() {
       setLoading(true);
 
       const payload = {
-        bill_no: String(v.bill_no).trim(),
-        tax_invoice_no: String(v.tax_invoice_no).trim(),
+        bill_no: autoBillNos ? null : String(v.bill_no).trim(),
+        tax_invoice_no: autoBillNos ? null : String(v.tax_invoice_no).trim(),
         po_id: poId ?? null,
         vendor_id: Number(v.vendor_id),
         warehouse_id: Number(v.warehouse_id),
@@ -452,7 +592,11 @@ export default function BillCreatePage() {
         vendor_person_id: v.vendor_person_id ? Number(v.vendor_person_id) : null,
 
         extra_charge_amt: Number(v.extra_charge_amt ?? 0),
-        extra_charge_note: v.extra_charge_note ? String(v.extra_charge_note) : null,
+        extra_charge_note: Array.isArray(v.extra_charge_note)
+          ? v.extra_charge_note.join(", ")
+          : v.extra_charge_note
+            ? String(v.extra_charge_note)
+            : null,
         header_discount_type: headerDiscountType,
         header_discount_value: Number(v.header_discount_value ?? 0),
 
@@ -506,30 +650,65 @@ export default function BillCreatePage() {
 
       {/* Header Form */}
       <Form form={form} layout="vertical">
+        <Form.Item name="extra_charge_value" hidden>
+          <Input />
+        </Form.Item>
+        <Form.Item name="extra_charge_amt" hidden>
+          <Input />
+        </Form.Item>
+        <Form.Item name="header_discount_value" hidden>
+          <Input />
+        </Form.Item>
         <Card loading={loading}>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <Form.Item
               name="bill_no"
               label="เลขที่ Bill"
               className="md:col-span-1"
-              rules={[
-                { required: true, message: "กรอกเลขที่ Bill" },
-                { min: 3, message: "อย่างน้อย 3 ตัวอักษร" }
-              ]}
+              rules={
+                autoBillNos
+                  ? []
+                  : [
+                      { required: true, message: "กรอกเลขที่ Bill" },
+                      { min: 3, message: "อย่างน้อย 3 ตัวอักษร" },
+                    ]
+              }
+              extra={
+                autoBillNos
+                  ? "ระบบ gen เลขให้ตามวันที่เอกสาร และจะล็อกช่องนี้ไว้"
+                  : "ระบบ gen ไม่ได้ กรุณากรอกเลขที่ Bill เอง"
+              }
             >
-              <Input placeholder="เช่น BILL-2026-0001" />
+              <Input
+                placeholder={autoBillNos ? "กำลัง gen เลขที่ Bill" : "เช่น BILL-PO202604-0005"}
+                disabled={autoBillNos}
+                suffix={billNosLoading ? "..." : autoBillNos ? "AUTO" : "MANUAL"}
+              />
             </Form.Item>
 
             <Form.Item
               name="tax_invoice_no"
               label="เลขที่ใบกำกับภาษี"
               className="md:col-span-1"
-              rules={[
-                { required: true, message: "กรอกเลขที่ใบกำกับภาษี" },
-                { min: 3, message: "อย่างน้อย 3 ตัวอักษร" }
-              ]}
+              rules={
+                autoBillNos
+                  ? []
+                  : [
+                      { required: true, message: "กรอกเลขที่ใบกำกับภาษี" },
+                      { min: 3, message: "อย่างน้อย 3 ตัวอักษร" },
+                    ]
+              }
+              extra={
+                autoBillNos
+                  ? "ระบบ gen เลข TAX คู่กับ Bill และจะล็อกช่องนี้ไว้"
+                  : "ระบบ gen ไม่ได้ กรุณากรอกเลขที่ใบกำกับภาษีเอง"
+              }
             >
-              <Input placeholder="เช่น TAX-2026-0001" />
+              <Input
+                placeholder={autoBillNos ? "กำลัง gen เลขที่ TAX" : "เช่น TAX-PO202604-0005"}
+                disabled={autoBillNos}
+                suffix={billNosLoading ? "..." : autoBillNos ? "AUTO" : "MANUAL"}
+              />
             </Form.Item>
 
             <Form.Item
@@ -546,7 +725,16 @@ export default function BillCreatePage() {
               label="วันที่ชำระ (Paid Date)"
               className="md:col-span-1"
             >
-              <DatePicker className="w-full" placeholder="ระบุตราบเมื่อชำระแล้ว" format="DD/MM/YYYY" />
+              <DatePicker
+                className="w-full"
+                placeholder="ระบุตราบเมื่อชำระแล้ว"
+                format="DD/MM/YYYY"
+                disabledDate={(current) =>
+                  issueDateWatcher
+                    ? current.isBefore(dayjs(issueDateWatcher).startOf("day"))
+                    : false
+                }
+              />
             </Form.Item>
 
             <Form.Item
@@ -760,6 +948,8 @@ export default function BillCreatePage() {
                           value={l.qty}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           onChange={(val) =>
                             setLine(l.key, { qty: Number(val || 0) })
                           }
@@ -776,6 +966,8 @@ export default function BillCreatePage() {
                           value={l.unit_cost}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           onChange={(val) =>
                             setLine(l.key, { unit_cost: Number(val ?? 0) })
                           }
@@ -796,6 +988,8 @@ export default function BillCreatePage() {
                           value={l.discount_pct}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           onChange={(val) =>
                             setLine(l.key, { discount_pct: Number(val ?? 0) })
                           }
@@ -812,6 +1006,8 @@ export default function BillCreatePage() {
                           value={l.discount_amt}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           onChange={(val) =>
                             setLine(l.key, { discount_amt: Number(val ?? 0) })
                           }
@@ -819,7 +1015,7 @@ export default function BillCreatePage() {
                         />
                       </div>
 
-                      <div className="md:col-span-4">
+                      <div className="md:col-span-2">
                         <div className="text-xs text-gray-500 mb-1">
                           ประเภทภาษี
                         </div>
@@ -852,6 +1048,8 @@ export default function BillCreatePage() {
                           precision={2}
                           formatter={formatComma}
                           parser={parseComma}
+                          onKeyDown={preventNonNumericKey}
+                          onPaste={preventNonNumericPaste}
                           value={l.manual_vat !== undefined && l.manual_vat !== null && String(l.manual_vat) !== '' ? l.manual_vat : r.vat}
                           onChange={(val) =>
                             setLine(l.key, { manual_vat: val })
@@ -920,48 +1118,100 @@ export default function BillCreatePage() {
               {/* Extra Charge */}
               <Divider className="!my-2" />
               <div>
-                <div className="text-xs text-gray-500 mb-2">
+                <div className="text-sm font-medium mb-2">
                   ค่าใช้จ่ายเพิ่มเติม
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="col-span-2">
-                    <Form.Item name="extra_charge_note" noStyle>
-                      <Input placeholder="รายละเอียด (เช่น ค่าขนส่ง)" />
-                    </Form.Item>
-                  </div>
-                  <div className="col-span-2 mt-1">
-                    <Form.Item name="extra_charge_amt" noStyle>
-                      <InputNumber
-                        className="w-full"
-                        placeholder="จำนวนเงิน"
-                        min={0}
-                      />
-                    </Form.Item>
-                  </div>
-                </div>
+
+                <Form.Item label="จำนวนเงิน" className="!mb-2">
+                  <Radio.Group
+                    value={extraChargeType}
+                    onChange={(e) =>
+                      handleExtraChargeTypeChange(e.target.value)
+                    }
+                    className="mb-2"
+                  >
+                    <Radio value="PERCENT">% </Radio>
+                    <Radio value="AMOUNT">บาท</Radio>
+                  </Radio.Group>
+
+                  <InputNumber
+                    min={0}
+                    max={
+                      extraChargeType === "PERCENT"
+                        ? 100
+                        : extraChargeBaseAmount
+                    }
+                    value={normalizeExtraChargeValue(extraChargeValue)}
+                    precision={2}
+                    formatter={formatComma}
+                    parser={parseComma}
+                    onKeyDown={preventNonNumericKey}
+                    onPaste={preventNonNumericPaste}
+                    onChange={setExtraChargeValue}
+                    onBlur={() =>
+                      setExtraChargeValue(
+                        form.getFieldValue("extra_charge_value"),
+                      )
+                    }
+                    style={{ width: "100%" }}
+                    placeholder="0"
+                  />
+                </Form.Item>
+
+                {extraChargeType === "PERCENT" && (
+                  <Form.Item label="จำนวนเงินที่คำนวณจาก %" className="!mb-2">
+                    <InputNumber
+                      value={Number(extraChargeAmt ?? 0)}
+                      disabled
+                      precision={2}
+                      formatter={formatComma}
+                      parser={parseComma}
+                      style={{ width: "100%" }}
+                    />
+                  </Form.Item>
+                )}
+
+                <Form.Item
+                  name="extra_charge_note"
+                  label="รายละเอียด"
+                  className="!mb-0"
+                >
+                  <Select
+                    mode="tags"
+                    allowClear
+                    placeholder="เลือกหรือพิมพ์เอง"
+                    options={extraChargeOptions.map((x) => ({
+                      value: x,
+                      label: x,
+                    }))}
+                  />
+                </Form.Item>
               </div>
 
               {/* Header Discount */}
               <Divider className="!my-2" />
               <div>
-                <div className="text-xs text-gray-500 mb-2">ส่วนลดท้ายบิล</div>
-                <Space.Compact className="w-full">
-                  <Select
-                    value={headerDiscountType}
-                    onChange={setHeaderDiscountType}
-                    style={{ width: "35%" }}
-                    options={[
-                      { value: "AMOUNT", label: "บาท" },
-                      { value: "PERCENT", label: "%" }
-                    ]}
-                  />
-                  <Form.Item name="header_discount_value" noStyle>
-                    <InputNumber
-                      className="w-[65%]"
-                      min={0}
-                    />
-                  </Form.Item>
-                </Space.Compact>
+                <div className="text-sm font-medium mb-2">ส่วนลดท้ายบิล</div>
+
+                <Radio.Group
+                  value={headerDiscountType}
+                  onChange={(e) => setHeaderDiscountType(e.target.value)}
+                  className="mb-2"
+                >
+                  <Radio value="PERCENT">% </Radio>
+                  <Radio value="AMOUNT">บาท</Radio>
+                </Radio.Group>
+
+                <InputNumber
+                  min={0}
+                  style={{ width: "100%" }}
+                  value={headerDiscountValue}
+                  onChange={(val) =>
+                    form.setFieldsValue({
+                      header_discount_value: val ?? 0,
+                    })
+                  }
+                />
                 <div className="flex justify-between mt-1 text-xs text-gray-400">
                   <div>คิดเป็นเงิน</div>
                   <div>{summary.headerDiscount.toLocaleString()}</div>
