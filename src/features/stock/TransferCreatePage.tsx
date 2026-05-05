@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import {
   Button,
   Card,
@@ -14,7 +14,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { ArrowLeftOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
-import { createTransfer } from "./transferApi";
+import { createTransfer, getNextTransferDocNo } from "./transferApi";
 import { useWarehouses } from "../warehouses/warehouseApi";
 import { searchProducts } from "../products/productApi";
 import { getStockCheck } from "./stockApi";
@@ -37,6 +37,8 @@ export default function TransferCreatePage() {
 
   const [items, setItems] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [docNoLoading, setDocNoLoading] = useState(false);
+  const [docNoAutoFailed, setDocNoAutoFailed] = useState(false);
 
   // Product Search
   const [productOptions, setProductOptions] = useState<any[]>([]);
@@ -91,6 +93,27 @@ export default function TransferCreatePage() {
     fetchProductList("");
   }, [fetchProductList]);
 
+  const loadNextDocNo = useCallback(async (issueDate?: string) => {
+    const date = issueDate || form.getFieldValue("issue_date") || dayjs().format("YYYY-MM-DD");
+    try {
+      setDocNoLoading(true);
+      setDocNoAutoFailed(false);
+      const nextDocNo = await getNextTransferDocNo(date);
+      form.setFieldValue("doc_no", nextDocNo);
+    } catch (e) {
+      console.error(e);
+      setDocNoAutoFailed(true);
+      message.warning("สร้างเลขที่เอกสารอัตโนมัติไม่สำเร็จ กรุณากรอกเลขที่เอกสารเอง");
+      form.setFieldValue("doc_no", `TF-${dayjs(date).format("YYYYMMDD")}-0001`);
+    } finally {
+      setDocNoLoading(false);
+    }
+  }, [form]);
+
+  useEffect(() => {
+    loadNextDocNo(dayjs().format("YYYY-MM-DD"));
+  }, [loadNextDocNo]);
+
   const handleAddItem = () => {
     const pid = form.getFieldValue("product_id");
     const qty = form.getFieldValue("qty");
@@ -137,8 +160,9 @@ export default function TransferCreatePage() {
 
     try {
       setSubmitting(true);
+      const docNo = values.doc_no || await getNextTransferDocNo(values.issue_date);
       const payload = {
-        doc_no: values.doc_no,
+        doc_no: docNo,
         issue_date: values.issue_date,
         source_warehouse_id: values.source_warehouse_id,
         target_warehouse_id: values.target_warehouse_id,
@@ -180,9 +204,13 @@ export default function TransferCreatePage() {
             <Form.Item
               label="เลขที่เอกสาร"
               name="doc_no"
-              initialValue={`TF-${dayjs().format("YYYYMMDD")}-XXXX`}
+              rules={[{ required: true, message: "ระบบยังสร้างเลขที่เอกสารไม่สำเร็จ" }]}
             >
-              <Input placeholder="ระบบจะสร้างให้อัตโนมัติถ้าเว้นว่าง" />
+              <Input
+                disabled={!docNoAutoFailed}
+                placeholder={docNoAutoFailed ? "กรอกเลขที่เอกสารเอง" : "ระบบกำลังสร้างเลขที่เอกสาร..."}
+                suffix={docNoLoading ? "กำลัง gen..." : undefined}
+              />
             </Form.Item>
 
             <Form.Item
@@ -191,7 +219,7 @@ export default function TransferCreatePage() {
               rules={[{ required: true, message: "ระบุวันที่" }]}
               initialValue={dayjs().format("YYYY-MM-DD")}
             >
-              <Input type="date" />
+              <Input type="date" onChange={(e) => loadNextDocNo(e.target.value)} />
             </Form.Item>
 
             <Form.Item
@@ -290,11 +318,13 @@ export default function TransferCreatePage() {
           />
         </Card>
 
-        <div className="flex justify-end gap-3 mt-6">
-          <Button onClick={() => nav(-1)}>ยกเลิก</Button>
-          <Button type="primary" htmlType="submit" loading={submitting}>
-            บันทึกใบโอนย้าย
-          </Button>
+        <div className="sticky bottom-0 z-0 mt-0 -mx-0 border-t border-gray-200 bg-white/95 px-2 py-3 shadow-[0_-6px_18px_rgba(15,23,42,0.08)] backdrop-blur">
+          <div className="flex justify-end gap-3">
+            <Button onClick={() => nav(-1)}>ยกเลิก</Button>
+            <Button type="primary" htmlType="submit" loading={submitting}>
+              บันทึกใบโอนย้าย
+            </Button>
+          </div>
         </div>
       </Form>
     </div>

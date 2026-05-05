@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Button,
   Card,
@@ -18,8 +18,10 @@ import type { TableProps } from "antd/es/table";
 import { PlusOutlined, ReloadOutlined, EditOutlined, QrcodeOutlined, PrinterOutlined } from "@ant-design/icons";
 import { useReactToPrint } from "react-to-print";
 import { ProductQRCodePrint } from "./ProductQRCodePrint";
+import ProductUnitAutocomplete from "./ProductUnitAutocomplete";
 import {
   createProduct,
+  getNextProductCode,
   listProducts,
   setProductActive,
   updateProduct,
@@ -53,6 +55,9 @@ export default function ProductListPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ProductRow | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loadingNextCode, setLoadingNextCode] = useState(false);
+  const [canSubmit, setCanSubmit] = useState(false);
+  const [duplicateNameError, setDuplicateNameError] = useState(false);
   const [form] = Form.useForm<FormValues>();
 
   const [printRow, setPrintRow] = useState<ProductRow | null>(null);
@@ -82,19 +87,48 @@ export default function ProductListPage() {
   const rows = data?.rows || [];
   const total = data?.total || 0;
 
-  function openCreate() {
+  function updateCanSubmit() {
+    const values = form.getFieldsValue();
+    const hasName = Boolean(values.name?.trim());
+    const hasUnit = Boolean(values.unit?.trim());
+    const hasSellPrice = values.sell_price !== undefined && values.sell_price !== null && Number(values.sell_price) >= 0;
+    setCanSubmit(hasName && hasUnit && hasSellPrice);
+  }
+
+  function showDuplicateNameError(messageText: string) {
+    form.setFields([{ name: "name", errors: [messageText] }]);
+    setDuplicateNameError(false);
+    window.requestAnimationFrame(() => setDuplicateNameError(true));
+  }
+
+  async function openCreate() {
     setEditing(null);
     form.resetFields();
+    setDuplicateNameError(false);
     form.setFieldsValue({
+      code: "",
       sell_price: 0,
       is_active: true,
       is_vat: true,
     });
+    setCanSubmit(false);
     setOpen(true);
+
+    try {
+      setLoadingNextCode(true);
+      const code = await getNextProductCode();
+      form.setFieldValue("code", code);
+    } catch (e) {
+      console.error(e);
+      message.warning("โหลดรหัสสินค้าถัดไปไม่สำเร็จ ระบบจะสร้างให้ตอนบันทึก", 2);
+    } finally {
+      setLoadingNextCode(false);
+    }
   }
 
   function openEdit(row: ProductRow) {
     setEditing(row);
+    setDuplicateNameError(false);
     form.setFieldsValue({
       code: row.code,
       name: row.name,
@@ -103,6 +137,7 @@ export default function ProductListPage() {
       is_active: row.is_active === 1,
       is_vat: row.is_vat === 1,
     });
+    setCanSubmit(Boolean(row.name?.trim()) && Boolean(row.unit?.trim()) && row.sell_price !== null && row.sell_price !== undefined);
     setOpen(true);
   }
 
@@ -110,9 +145,9 @@ export default function ProductListPage() {
     setSaving(true);
     try {
       const payload = {
-        code: values.code?.trim(),
+        code: editing ? values.code?.trim() : undefined,
         name: values.name.trim(),
-        unit: values.unit ?? null,
+        unit: values.unit?.trim() || null,
         sell_price: Number(values.sell_price ?? 0),
         is_active: values.is_active ? 1 : 0,
         is_vat: values.is_vat ? 1 : 0,
@@ -128,8 +163,13 @@ export default function ProductListPage() {
 
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
       setOpen(false);
+      setDuplicateNameError(false);
     } catch (e: any) {
-      message.error(e?.response?.data?.message || "บันทึกไม่สำเร็จ", 2);
+      const errorMessage = e?.response?.data?.message || "บันทึกไม่สำเร็จ";
+      if (String(errorMessage).includes("อยู่ในคลังสินค้าแล้ว")) {
+        showDuplicateNameError(errorMessage);
+      }
+      message.error(errorMessage, 2);
     } finally {
       setSaving(false);
     }
@@ -296,27 +336,72 @@ export default function ProductListPage() {
       <Modal
         open={open}
         title={editing ? "แก้ไขสินค้า" : "เพิ่มสินค้า"}
-        onCancel={() => setOpen(false)}
+        onCancel={() => {
+          setOpen(false);
+          setDuplicateNameError(false);
+        }}
         onOk={() => form.submit()}
+        okButtonProps={{ disabled: !canSubmit }}
         confirmLoading={saving}
         destroyOnClose
         centered
+        className={duplicateNameError ? "product-duplicate-modal" : undefined}
       >
-        <Form form={form} layout="vertical" onFinish={submit}>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={submit}
+          onValuesChange={(changedValues) => {
+            if ("name" in changedValues) {
+              setDuplicateNameError(false);
+              form.setFields([{ name: "name", errors: [] }]);
+            }
+            updateCanSubmit();
+          }}
+        >
           <Form.Item name="code" label="รหัสสินค้า">
-            <Input disabled placeholder="ระบบสร้างให้อัตโนมัติ" />
+            <Input
+              disabled
+              placeholder={loadingNextCode ? "กำลังโหลดรหัสสินค้า..." : "ระบบสร้างให้อัตโนมัติ"}
+            />
           </Form.Item>
 
-          <Form.Item name="name" label="ชื่อสินค้า" rules={[{ required: true }]}>
+          <Form.Item name="name" label="ชื่อสินค้า" rules={[{ required: true, message: "กรอกชื่อสินค้า" }]}>
             <Input />
           </Form.Item>
 
-          <Form.Item name="unit" label="หน่วย">
-            <Input />
+          <Form.Item name="unit" label="หน่วย" rules={[{ required: true, message: "กรอกหน่วย" }]}>
+            <ProductUnitAutocomplete />
           </Form.Item>
 
-          <Form.Item name="sell_price" label="ราคาขาย">
-            <InputNumber className="w-full" min={0} />
+          <Form.Item
+            name="sell_price"
+            label="ราคาขาย"
+            rules={[{ required: true, message: "กรอกราคาขาย" }]}
+          >
+            <InputNumber
+              className="w-full"
+              min={0}
+              controls={false}
+              inputMode="decimal"
+              onKeyDown={(e) => {
+                const allowedKeys = [
+                  "Backspace",
+                  "Delete",
+                  "Tab",
+                  "ArrowLeft",
+                  "ArrowRight",
+                  "Home",
+                  "End",
+                ];
+                if (allowedKeys.includes(e.key) || e.metaKey || e.ctrlKey) return;
+                if (!/^[0-9.]$/.test(e.key)) e.preventDefault();
+              }}
+              onPaste={(e) => {
+                const text = e.clipboardData.getData("text");
+                if (!/^\d*\.?\d*$/.test(text)) e.preventDefault();
+              }}
+            />
           </Form.Item>
 
           <Form.Item name="is_vat" label="VAT" valuePropName="checked">
