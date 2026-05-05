@@ -193,9 +193,10 @@ export default function SettingsPage() {
                         name="logo"
                         listType="picture-card"
                         showUploadList={false}
-                        beforeUpload={async (file) => {
-                          const base64 = await getBase64(file);
-                          setLogoUrl(base64);
+                        beforeUpload={(file) => {
+                          getBase64(file).then((base64) => {
+                            setLogoUrl(base64);
+                          });
                           return false;
                         }}
                       >
