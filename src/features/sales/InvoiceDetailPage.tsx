@@ -130,6 +130,8 @@ export default function InvoiceDetailPage() {
   
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [cancelStepOpen, setCancelStepOpen] = useState(false);
+  const [cancelStepReason, setCancelStepReason] = useState("");
   const [acting, setActing] = useState(false);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -151,6 +153,10 @@ export default function InvoiceDetailPage() {
     header?.status === "DRAFT" ||
     header?.status === "CONFIRMED" ||
     header?.status === "SHIPPED";
+  const canCancelStep =
+    (header?.status === "CONFIRMED" || header?.status === "SHIPPED") &&
+    !header?.receipt_no &&
+    !header?.tax_invoice_no;
   const canReceivePayment = header?.status === "CONFIRMED" || header?.status === "SHIPPED";
   const canIssueTax = header?.status === "CONFIRMED" || header?.status === "SHIPPED";
 
@@ -266,6 +272,32 @@ export default function InvoiceDetailPage() {
       load();
     } catch (e: any) {
       message.error(e?.response?.data?.message || e?.message || "ยกเลิกไม่สำเร็จ", 2);
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function onCancelStep() {
+    if (!header) return;
+    const reason = cancelStepReason.trim();
+    if (reason.length < 5) {
+      message.error("กรุณากรอกเหตุผลอย่างน้อย 5 ตัวอักษร", 2);
+      return;
+    }
+    try {
+      setActing(true);
+      const res = await postAction(`/sales/invoice/${saleId}/cancel-step`, { reason });
+      const labelByStatus: Record<string, string> = {
+        QUOTATION: "ใบเสนอราคา (QT)",
+        CONFIRMED: "ใบแจ้งหนี้ (IV)",
+      };
+      const newLabel = labelByStatus[res?.new_status] || res?.new_status || "ขั้นก่อนหน้า";
+      message.success(`ย้อนกลับไปยัง ${newLabel} แล้ว`, 2);
+      setCancelStepOpen(false);
+      setCancelStepReason("");
+      load();
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || e?.message || "ย้อน step ไม่สำเร็จ", 2);
     } finally {
       setActing(false);
     }
@@ -413,6 +445,15 @@ export default function InvoiceDetailPage() {
               disabled={!canCancel || acting}
             >
               ยกเลิก (Cancel)
+            </Button>
+
+            {/* Cancel Step — ย้อนกลับ 1 ขั้น */}
+            <Button
+              danger
+              onClick={() => setCancelStepOpen(true)}
+              disabled={!canCancelStep || acting}
+            >
+              ย้อน 1 ขั้น (Cancel Step)
             </Button>
 
             {/* Create DO (Ship) */}
@@ -848,6 +889,41 @@ export default function InvoiceDetailPage() {
           rows={4}
           value={cancelReason}
           onChange={(e) => setCancelReason(e.target.value)}
+          placeholder="เหตุผล (อย่างน้อย 5 ตัวอักษร)"
+        />
+      </Modal>
+
+      <Modal
+        open={cancelStepOpen}
+        title={
+          header?.status === "SHIPPED"
+            ? "ย้อน Step — ยกเลิกใบส่งของ (DO) กลับสู่ใบแจ้งหนี้ (IV)"
+            : "ย้อน Step — ยกเลิกใบแจ้งหนี้ (IV) กลับสู่ใบเสนอราคา (QT)"
+        }
+        okText="ยืนยันย้อน Step"
+        okButtonProps={{ danger: true, loading: acting }}
+        onOk={onCancelStep}
+        centered
+        onCancel={() => {
+          setCancelStepOpen(false);
+          setCancelStepReason("");
+        }}
+      >
+        <p className="mb-2 text-sm text-gray-600">
+          {header?.status === "SHIPPED"
+            ? "ระบบจะลบเลข DO และวันจัดส่ง กลับสู่สถานะใบแจ้งหนี้ (CONFIRMED)"
+            : "ระบบจะลบเลข IV และวันยืนยัน กลับสู่สถานะใบเสนอราคา (QUOTATION)"}
+          {((header?.status === "SHIPPED" &&
+            header?.stock_deducted_at === "SHIPMENT") ||
+            (header?.status === "CONFIRMED" &&
+              (header?.stock_deducted_at === "INVOICE" ||
+                header?.stock_deducted_at === "MANUAL"))) &&
+            " และจะคืนสต็อกให้อัตโนมัติ"}
+        </p>
+        <Input.TextArea
+          rows={4}
+          value={cancelStepReason}
+          onChange={(e) => setCancelStepReason(e.target.value)}
           placeholder="เหตุผล (อย่างน้อย 5 ตัวอักษร)"
         />
       </Modal>
