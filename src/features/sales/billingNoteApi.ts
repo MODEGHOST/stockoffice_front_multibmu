@@ -15,6 +15,7 @@ export type BillingNoteRow = {
     status: BillingNoteStatus;
     total_amount: number;
     note: string | null;
+    creator_name?: string | null;
     created_at: string;
     updated_at: string;
 };

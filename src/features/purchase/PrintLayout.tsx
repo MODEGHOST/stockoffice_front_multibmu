@@ -190,7 +190,20 @@ export const PrintLayout = React.forwardRef<HTMLDivElement, PrintLayoutProps>(
         </div>
 
 
-        
+        {/* Signatures */}
+        {signatures && signatures.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 pt-8 border-t border-slate-200 break-inside-avoid">
+                {signatures.map((sig, idx) => (
+                    <div key={idx} className="text-center">
+                        <div className="border-b border-slate-400 w-32 mx-auto mb-2 mt-8"></div>
+                        <p className="text-sm font-semibold text-slate-700">{sig.title}</p>
+                        {sig.name && <p className="text-xs text-slate-500 mt-1">{sig.name}</p>}
+                        {sig.date && <p className="text-xs text-slate-400 mt-1">{sig.date}</p>}
+                    </div>
+                ))}
+            </div>
+        )}
+
       </div>
     );
   }

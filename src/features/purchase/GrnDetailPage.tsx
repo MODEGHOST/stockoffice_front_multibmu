@@ -92,7 +92,13 @@ export default function GrnDetailPage() {
         try {
           setActing(true);
           await approveGrn(grnId);
-          message.success("Approve สำเร็จ", 1.2);
+          Modal.success({
+            title: "เสร็จสิ้นกระบวนการรับสินค้า",
+            content: "ระบบได้ทำการเพิ่มสต็อกสินค้าเข้าคลังเรียบร้อยแล้ว",
+            okText: "กลับหน้ารายการ GRN",
+            centered: true,
+            onOk: () => nav("/purchase/grn")
+          });
           await load();
         } catch (e: any) {
           message.error(e?.response?.data?.message || "Approve ไม่สำเร็จ", 2);
@@ -215,6 +221,7 @@ export default function GrnDetailPage() {
 
           <Descriptions.Item label="Vendor">{vendorText}</Descriptions.Item>
           <Descriptions.Item label="Warehouse">{whText}</Descriptions.Item>
+          <Descriptions.Item label="ผู้สร้างเอกสาร (Creator)">{header?.creator_name || "-"}</Descriptions.Item>
 
           <Descriptions.Item label="PO Ref">
               {header?.po_id ? (

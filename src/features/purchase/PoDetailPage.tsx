@@ -310,6 +310,9 @@ export default function PoDetailPage() {
           <Descriptions.Item label="Vendor">
             {header?.vendor_name ?? header?.vendor_id ?? "-"}
           </Descriptions.Item>
+          <Descriptions.Item label="ผู้สร้างเอกสาร (Creator)">
+            {header?.creator_name || "-"}
+          </Descriptions.Item>
           <Descriptions.Item label="ที่อยู่จัดส่งเอกสาร" span={2}>
             {header?.vendor_shipping_address_line
               ? [

@@ -97,6 +97,7 @@ export type GrnHeader = {
 
   created_at?: string;
   updated_at?: string;
+  creator_name?: string | null;
 
   // Added for UI consistency with Bill (Backend might not persist yet)
   extra_charge_amt?: number | null;
@@ -241,6 +242,7 @@ export type PoHeader = {
 
   created_at?: string;
   updated_at?: string;
+  creator_name?: string | null;
 
   vendor_name?: string;
   warehouse_name?: string;
@@ -388,6 +390,7 @@ export type BillHeader = {
 
   created_at?: string;
   updated_at?: string;
+  creator_name?: string | null;
 
   vendor_name?: string;
   warehouse_name?: string;

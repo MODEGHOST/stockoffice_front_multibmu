@@ -511,7 +511,10 @@ export default function ScanToSalePage() {
                   <Select
                     className="w-full"
                     placeholder="เลือกบัญชี (เช่น เงินโอน, เงินสดหน้าร้าน)"
-                    options={financeAccounts.map(f => ({ value: f.id, label: `${f.bank_name} - ${f.account_name}` }))}
+                    options={financeAccounts.map((f: any) => ({ 
+                      value: f.id, 
+                      label: `[${f.type}] ${f.name} (คงเหลือ ${Number(f.balance || 0).toLocaleString()})` 
+                    }))}
                     onChange={(v) => form.setFieldValue("finance_account_id", v)}
                   />
                 </div>

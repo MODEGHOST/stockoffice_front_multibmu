@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Button, Form, Input, message, Tabs, Table, Select, Tag } from "antd";
-import { SettingOutlined, SaveOutlined, BankOutlined, FileTextOutlined } from "@ant-design/icons";
+import { Button, Form, Input, message, Tabs, Table, Select, Tag, Upload, Radio } from "antd";
+import { SettingOutlined, SaveOutlined, BankOutlined, FileTextOutlined, PlusOutlined } from "@ant-design/icons";
 import api from "../../lib/api";
 import AddressSelect from "../../components/AddressSelect";
 
@@ -15,6 +15,8 @@ type Company = {
   zip_code?: string;
   phone: string;
   email: string;
+  logo?: string;
+  is_vat_registered: number;
   is_active: number;
   doc_configs: DocConfig[];
 };
@@ -31,6 +33,15 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+
+  const getBase64 = (file: any): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
 
   useEffect(() => {
     load();
@@ -41,8 +52,10 @@ export default function SettingsPage() {
     try {
       const { data } = await api.get("/company/settings");
       setData(data);
+      setLogoUrl(data.logo || null);
       form.setFieldsValue({
         ...data,
+        is_vat_registered: data.is_vat_registered !== undefined ? Number(data.is_vat_registered) : 0,
         addressObj: {
           province: data.province,
           district: data.district,
@@ -70,6 +83,8 @@ export default function SettingsPage() {
         district: values.addressObj?.district || null,
         sub_district: values.addressObj?.sub_district || null,
         zip_code: values.addressObj?.zip_code || null,
+        logo: logoUrl,
+        is_vat_registered: values.is_vat_registered !== undefined ? values.is_vat_registered : 0,
       };
 
       await api.put("/company/settings", payload);
@@ -150,6 +165,13 @@ export default function SettingsPage() {
      return found || { doc_type: t, prefix: t + "-", reset_policy: "MONTHLY", is_enabled: 1 } as DocConfig;
   });
 
+  const uploadButton = (
+    <div>
+      <PlusOutlined />
+      <div style={{ marginTop: 8 }}>อัปโหลดโลโก้</div>
+    </div>
+  );
+
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
@@ -165,6 +187,24 @@ export default function SettingsPage() {
             <div className="py-2">
               <Form form={form} layout="vertical" onFinish={onSaveCompany}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
+                  <div className="md:col-span-2 mb-4">
+                    <Form.Item label="โลโก้บริษัท (Company Logo)">
+                      <Upload
+                        name="logo"
+                        listType="picture-card"
+                        showUploadList={false}
+                        beforeUpload={(file) => {
+                          getBase64(file).then((base64) => {
+                            setLogoUrl(base64);
+                          });
+                          return false;
+                        }}
+                      >
+                        {logoUrl ? <img src={logoUrl} alt="logo" style={{ width: '100%', maxHeight: '100px', objectFit: 'contain' }} /> : uploadButton}
+                      </Upload>
+                    </Form.Item>
+                  </div>
+
                   <Form.Item label="Company Name (ชื่อบริษัท)" name="name" rules={[{ required: true }]}>
                     <Input size="large" />
                   </Form.Item>
@@ -195,6 +235,14 @@ export default function SettingsPage() {
                   >
                     <Input size="large" />
                   </Form.Item>
+                  <div className="md:col-span-2 mt-2">
+                    <Form.Item label="สถานะการจดภาษีมูลค่าเพิ่ม (VAT)" name="is_vat_registered" rules={[{ required: true, message: 'กรุณาระบุสถานะ VAT' }]}>
+                      <Radio.Group>
+                        <Radio value={1}>จดทะเบียนภาษีมูลค่าเพิ่ม (VAT 7%)</Radio>
+                        <Radio value={0}>ไม่จดทะเบียนภาษีมูลค่าเพิ่ม (Non-VAT)</Radio>
+                      </Radio.Group>
+                    </Form.Item>
+                  </div>
                 </div>
                 
                 <div className="mt-6 p-5 bg-orange-50/40 rounded-xl border border-orange-100">

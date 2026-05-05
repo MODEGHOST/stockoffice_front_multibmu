@@ -178,7 +178,7 @@ export function InvoicePrintButton({ header, items }: InvoicePrintButtonProps) {
                   note={header.note || ""}
                   signatures={[
                       { title: "ผู้รับวางบิล / ผู้รับของ (Receiver)" },
-                      { title: "ผู้ขาย / ผู้อนุมัติ (Authorized Signature)" }
+                      { title: "ผู้ขาย / ผู้อนุมัติ (Authorized Signature)", name: header.seller_name || header.creator_name || "" }
                   ]}
                 />
               </div>
