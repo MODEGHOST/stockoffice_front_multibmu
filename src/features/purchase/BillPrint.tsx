@@ -63,7 +63,7 @@ export function BillPrint({ data }: BillPrintProps) {
           }}
           note={header.note || ""}
           signatures={[
-              { title: "Received By", name: "Store Keeper" },
+              { title: "Received By", name: header.creator_name || "Store Keeper" },
               { title: "Approved By", name: "Manager" }
           ]}
         />

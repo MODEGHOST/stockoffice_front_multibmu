@@ -179,6 +179,9 @@ export default function BillingNoteDetailPage() {
               <Descriptions.Item label="กำหนดชำระ">
                 {header.due_date ? dayjs(header.due_date).format("DD/MM/YYYY") : "-"}
               </Descriptions.Item>
+              <Descriptions.Item label="ผู้สร้างเอกสาร (Creator)">
+                {header.creator_name || "-"}
+              </Descriptions.Item>
             </Descriptions>
           </div>
         </div>

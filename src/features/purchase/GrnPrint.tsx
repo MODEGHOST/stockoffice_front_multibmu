@@ -59,7 +59,7 @@ export function GrnPrint({ data }: GrnPrintProps) {
           }}
           note={header.note || ""}
           signatures={[
-              { title: "Received By", name: "Store Keeper" },
+              { title: "Received By", name: header.creator_name || "Store Keeper" },
               { title: "Inspect By", name: "Inspector" }
           ]}
         />

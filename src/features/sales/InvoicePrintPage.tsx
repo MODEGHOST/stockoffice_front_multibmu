@@ -34,6 +34,8 @@ type Header = {
   customer_tax_id?: string;
   customer_contact_name?: string;
   customer_phone?: string;
+  creator_name?: string;
+  seller_name?: string;
   
   note: string | null;
 };
@@ -184,7 +186,7 @@ export default function InvoicePrintPage() {
           note={header.note || ""}
           signatures={[
               { title: "ผู้รับวางบิล / ผู้รับของ (Receiver)" },
-              { title: "ผู้ขาย / ผู้อนุมัติ (Authorized Signature)" }
+              { title: "ผู้ขาย / ผู้อนุมัติ (Authorized Signature)", name: header.seller_name || header.creator_name || "" }
           ]}
         />
       </div>

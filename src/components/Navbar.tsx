@@ -13,7 +13,7 @@ export default function Navbar() {
 
   useEffect(() => {
     const token = localStorage.getItem("accessToken");
-    if (token && !getMeCache()) me().catch(() => {});
+    if (token && !getMeCache()) me().catch(() => { });
     const unsub = subscribeAuth(() => force((x) => x + 1));
     return unsub;
   }, []);
@@ -57,7 +57,7 @@ export default function Navbar() {
     hasPermission("master.user.manage") ? { key: "/admin/users", label: "ผู้ใช้งาน" } : null,
     hasPermission("master.role.manage") ? { key: "/admin/roles", label: "สิทธิ์การใช้งาน" } : null,
     hasPermission("master.user.manage") ? { key: "/admin/commissions", label: "จ่ายค่าคอมมิชชั่น" } : null,
-    hasPermission("master.company.manage") ? { key: "/admin/settings", label: "ตั้งค่าระบบ" } : null,
+    hasPermission("master.company.manage") ? { key: "/admin/settings", label: "ตั้งค่าระบบ / ข้อมูลบริษัท" } : null,
     hasPermission("system.settings.manage") ? { key: "/admin/logs", label: "ประวัติการใช้งาน" } : null,
   ].filter(Boolean);
 
@@ -95,10 +95,10 @@ export default function Navbar() {
     <div className="w-full flex items-center justify-between">
       {/* Mobile Hamburger Button */}
       <div className="lg:hidden flex-none mr-4">
-        <Button 
-          type="text" 
-          icon={<MenuOutlined className="text-lg" />} 
-          onClick={() => setDrawerVisible(true)} 
+        <Button
+          type="text"
+          icon={<MenuOutlined className="text-lg" />}
+          onClick={() => setDrawerVisible(true)}
         />
       </div>
 

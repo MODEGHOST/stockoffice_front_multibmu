@@ -70,6 +70,7 @@ type Header = {
   // Extra fields for display if joined (or we fetch separately)
   customer_name?: string;
   warehouse_name?: string;
+  creator_name?: string;
 };
 
 type Item = {
@@ -240,7 +241,18 @@ export default function InvoiceDetailPage() {
     try {
       setActing(true);
       const res = await postAction(`/sales/invoice/${saleId}/ship`, { issue_tax: wantTax });
-      message.success(`จัดส่งสำเร็จ: ${res.delivery_no}`, 2);
+      
+      if (header.receipt_no) {
+         Modal.success({
+            title: "เสร็จสิ้นกระบวนการขาย",
+            content: `ออกใบส่งของ (${res.delivery_no}) เรียบร้อยแล้ว กระบวนการขายเสร็จสมบูรณ์ (ส่งของและรับชำระเงินครบแล้ว)`,
+            okText: "กลับหน้ารายการ",
+            centered: true,
+            onOk: () => nav("/sales/invoice")
+         });
+      } else {
+         message.success(`จัดส่งสำเร็จ: ${res.delivery_no}`, 2);
+      }
       load();
     } catch (e: any) {
       message.error(e?.response?.data?.message || e?.message || "จัดส่งไม่สำเร็จ", 2);
@@ -287,7 +299,19 @@ export default function InvoiceDetailPage() {
         issue_tax: paymentIssueTax,
         finance_account_id: paymentAccountId
       });
-      message.success(`ออกใบเสร็จสำเร็จ: ${res.receipt_no}`, 2);
+      
+      if (header.status === "SHIPPED") {
+         Modal.success({
+            title: "เสร็จสิ้นกระบวนการขาย",
+            content: `ออกใบเสร็จรับเงิน (${res.receipt_no}) เรียบร้อยแล้ว กระบวนการขายเสร็จสมบูรณ์ (ส่งของและรับชำระเงินครบแล้ว)`,
+            okText: "กลับหน้ารายการ",
+            centered: true,
+            onOk: () => nav("/sales/invoice")
+         });
+      } else {
+         message.success(`ออกใบเสร็จสำเร็จ: ${res.receipt_no}`, 2);
+      }
+      
       setPaymentOpen(false);
       load();
     } catch (e: any) {
@@ -483,6 +507,7 @@ export default function InvoiceDetailPage() {
                    : <Tag color="cyan">เมื่อออกใบส่งของ (DO)</Tag>}
               </Descriptions.Item>
               <Descriptions.Item label="คลังสินค้า (Warehouse)">{header?.warehouse_id}</Descriptions.Item>
+              <Descriptions.Item label="ผู้สร้างเอกสาร (Creator)">{header?.creator_name || "-"}</Descriptions.Item>
               
               <Descriptions.Item label="หมายเหตุ" span={2}>{header?.note || "-"}</Descriptions.Item>
               {header?.cancel_reason && <Descriptions.Item label="เหตุผลที่ยกเลิก" span={2} contentStyle={{ color: "red" }}>{header.cancel_reason}</Descriptions.Item>}

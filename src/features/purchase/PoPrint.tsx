@@ -77,7 +77,7 @@ export function PoPrint({ data }: PoPrintProps) {
           }}
           note={header.note || ""}
           signatures={[
-              { title: "Prepared By", name: "Purchaser" },
+              { title: "Prepared By", name: header.creator_name || "Purchaser" },
               { title: "Authorized By", name: "Manager" }
           ]}
         />

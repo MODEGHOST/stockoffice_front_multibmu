@@ -254,6 +254,9 @@ export default function BillDetailPage() {
           <Descriptions.Item label="Vendor">
             {header?.vendor_name ?? header?.vendor_id ?? "-"}
           </Descriptions.Item>
+          <Descriptions.Item label="ผู้สร้างเอกสาร (Creator)">
+            {header?.creator_name || "-"}
+          </Descriptions.Item>
 
           <Descriptions.Item label="Warehouse">
             {header?.warehouse_name ?? header?.warehouse_id ?? "-"}
