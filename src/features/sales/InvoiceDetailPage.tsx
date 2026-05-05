@@ -156,8 +156,7 @@ export default function InvoiceDetailPage() {
     header?.status === "SHIPPED";
   const canCancelStep =
     (header?.status === "CONFIRMED" || header?.status === "SHIPPED") &&
-    !header?.receipt_no &&
-    !header?.tax_invoice_no;
+    !header?.receipt_no;
   const canReceivePayment = header?.status === "CONFIRMED" || header?.status === "SHIPPED";
   const canIssueTax = header?.status === "CONFIRMED" || header?.status === "SHIPPED";
 
@@ -930,6 +929,11 @@ export default function InvoiceDetailPage() {
                 header?.stock_deducted_at === "MANUAL"))) &&
             " และจะคืนสต็อกให้อัตโนมัติ"}
         </p>
+        {header?.tax_invoice_no && (
+          <p className="mb-2 text-sm text-orange-600">
+            หมายเหตุ: ใบกำกับภาษี ({header.tax_invoice_no}) จะถูกลบไปด้วย
+          </p>
+        )}
         <Input.TextArea
           rows={4}
           value={cancelStepReason}
