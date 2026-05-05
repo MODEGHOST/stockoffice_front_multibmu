@@ -150,7 +150,7 @@ export default function BillCreatePage() {
   const location = useLocation();
 
   const [loading, setLoading] = useState(false);
-  const [autoBillNos, setAutoBillNos] = useState(true);
+  const [autoBillNos, setAutoBillNos] = useState(false);
   const [billNosLoading, setBillNosLoading] = useState(false);
 
   const [products, setProducts] = useState<ProductRow[]>([]);
@@ -295,35 +295,14 @@ export default function BillCreatePage() {
   }, [poId]);
 
   async function loadNextBillNos(issueDateValue?: any) {
-    const d = dayjs(issueDateValue || form.getFieldValue("issue_date") || dayjs());
-    if (!d.isValid()) return;
-
-    try {
-      setBillNosLoading(true);
-      const next = await getNextBillNos(d.format("YYYY-MM-DD"));
-      if (!next?.bill_no || !next?.tax_invoice_no) {
-        throw new Error("Bill number not found");
-      }
-      setAutoBillNos(true);
-      form.setFieldsValue({
-        bill_no: next.bill_no,
-        tax_invoice_no: next.tax_invoice_no,
-      });
-    } catch {
-      setAutoBillNos(false);
-      form.setFieldsValue({ bill_no: "", tax_invoice_no: "" });
-      message.warning("ระบบ gen เลขที่ Bill/Tax ไม่ได้ กรุณากรอกเอง", 2);
-    } finally {
-      setBillNosLoading(false);
-    }
+    // Purchase bills are from vendors, so we don't auto-generate them
+    setAutoBillNos(false);
   }
 
   const issueDateWatcher = Form.useWatch("issue_date", form);
 
   useEffect(() => {
-    if (!issueDateWatcher) return;
-    loadNextBillNos(issueDateWatcher);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // We don't auto-generate bill numbers for Purchase Bills anymore
   }, [issueDateWatcher]);
 
   async function loadVendorPeople(vendorId: number) {
@@ -680,9 +659,7 @@ export default function BillCreatePage() {
               }
             >
               <Input
-                placeholder={autoBillNos ? "กำลัง gen เลขที่ Bill" : "เช่น BILL-PO202604-0005"}
-                disabled={autoBillNos}
-                suffix={billNosLoading ? "..." : autoBillNos ? "AUTO" : "MANUAL"}
+                placeholder="เช่น BILL-PO202604-0005"
               />
             </Form.Item>
 
@@ -705,9 +682,7 @@ export default function BillCreatePage() {
               }
             >
               <Input
-                placeholder={autoBillNos ? "กำลัง gen เลขที่ TAX" : "เช่น TAX-PO202604-0005"}
-                disabled={autoBillNos}
-                suffix={billNosLoading ? "..." : autoBillNos ? "AUTO" : "MANUAL"}
+                placeholder="เช่น TAX-PO202604-0005"
               />
             </Form.Item>
 
