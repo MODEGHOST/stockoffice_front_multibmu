@@ -185,8 +185,15 @@ export default function BillCreatePage() {
     return Number.isFinite(n) && n > 0 ? n : null;
   }, [location.state]);
 
-  const poId = poIdFromQuery ?? poIdFromState ?? null;
+  const lockedPoId = poIdFromQuery ?? poIdFromState ?? null;
+  const [pickedPoId, setPickedPoId] = useState<number | null>(null);
+  const poId = lockedPoId ?? pickedPoId;
   const [poInfo, setPoInfo] = useState<{ po_no?: string | null; status?: string | null } | null>(null);
+
+  // PO autocomplete state
+  type PoSearchRow = { value: number; label: string; vendor_id: number; po_no: string };
+  const [poSearchOptions, setPoSearchOptions] = useState<PoSearchRow[]>([]);
+  const [poSearchLoading, setPoSearchLoading] = useState(false);
 
   // Vendor People & Address
   const [vendorPeople, setVendorPeople] = useState<VendorPerson[]>([]);
@@ -373,6 +380,57 @@ export default function BillCreatePage() {
     // Actually simplicity: just load.
     loadVendorPeople(Number(vendorIdSelector));
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendorIdSelector]);
+
+  async function searchPoOptions(q: string) {
+    if (!vendorIdSelector) {
+      setPoSearchOptions([]);
+      return;
+    }
+    setPoSearchLoading(true);
+    try {
+      type PoQuery = {
+        q: string;
+        status: string;
+        for_bill: boolean;
+        page: number;
+        pageSize: number;
+        vendor_id: number;
+      };
+      const params: PoQuery = {
+        q,
+        status: "APPROVED",
+        for_bill: true,
+        page: 1,
+        pageSize: 10,
+        vendor_id: Number(vendorIdSelector),
+      };
+      type PoRow = {
+        id: number;
+        po_no: string;
+        vendor_id: number;
+        vendor_name?: string;
+      };
+      const { data } = await api.get<{ rows?: PoRow[] }>("/purchase/po", { params });
+      const rows = Array.isArray(data?.rows) ? data.rows : [];
+      setPoSearchOptions(
+        rows.map((r) => ({
+          value: Number(r.id),
+          label: String(r.po_no || ""),
+          vendor_id: Number(r.vendor_id),
+          po_no: String(r.po_no || ""),
+        })),
+      );
+    } catch {
+      setPoSearchOptions([]);
+    } finally {
+      setPoSearchLoading(false);
+    }
+  }
+
+  // Drop the search results whenever vendor scope changes; the picker reloads on next focus.
+  useEffect(() => {
+    setPoSearchOptions([]);
   }, [vendorIdSelector]);
 
   // Calculations
@@ -680,13 +738,19 @@ export default function BillCreatePage() {
               }
             >
               <Input
-                placeholder={autoBillNos ? "กำลัง gen เลขที่ Bill" : "เช่น BILL-PO202604-0005"}
+                placeholder={
+                  autoBillNos
+                    ? "กำลัง gen เลขที่ Bill"
+                    : "เช่น BILL-PO202604-0005"
+                }
                 disabled={autoBillNos}
-                suffix={billNosLoading ? "..." : autoBillNos ? "AUTO" : "MANUAL"}
+                suffix={
+                  billNosLoading ? "..." : autoBillNos ? "AUTO" : "MANUAL"
+                }
               />
             </Form.Item>
 
-            <Form.Item
+            {/* <Form.Item
               name="tax_invoice_no"
               label="เลขที่ใบกำกับภาษี"
               className="md:col-span-1"
@@ -709,6 +773,17 @@ export default function BillCreatePage() {
                 disabled={autoBillNos}
                 suffix={billNosLoading ? "..." : autoBillNos ? "AUTO" : "MANUAL"}
               />
+            </Form.Item> */}
+            <Form.Item
+              name="tax_invoice_no"
+              label="เลขที่ใบกำกับภาษี"
+              className="md:col-span-1"
+              rules={[
+                { required: true, message: "กรอกเลขที่ใบกำกับภาษี" },
+                { min: 3, message: "อย่างน้อย 3 ตัวอักษร" },
+              ]}
+            >
+              <Input placeholder="เช่น TAX-2026-0001" />
             </Form.Item>
 
             <Form.Item
@@ -739,7 +814,9 @@ export default function BillCreatePage() {
 
             <Form.Item
               noStyle
-              shouldUpdate={(prev, current) => prev.paid_date !== current.paid_date}
+              shouldUpdate={(prev, current) =>
+                prev.paid_date !== current.paid_date
+              }
             >
               {({ getFieldValue }) => {
                 const isPaid = !!getFieldValue("paid_date");
@@ -749,22 +826,20 @@ export default function BillCreatePage() {
                     name="finance_account_id"
                     label="ช่องทางการจ่ายเงิน"
                     className="md:col-span-1"
-                    rules={[{ required: true, message: "เลือกช่องทางการจ่ายเงิน" }]}
+                    rules={[
+                      { required: true, message: "เลือกช่องทางการจ่ายเงิน" },
+                    ]}
                   >
                     <Select
                       placeholder="เลือกช่องทางการจ่ายเงิน"
-                      options={financeAccounts.map(a => ({
+                      options={financeAccounts.map((a) => ({
                         label: `[${a.type}] ${a.name} (คงเหลือ ${Number(a.balance).toLocaleString()})`,
-                        value: a.id
+                        value: a.id,
                       }))}
                     />
                   </Form.Item>
                 );
               }}
-            </Form.Item>
-
-            <Form.Item name="po_id" label="อ้างอิง PO" className="md:col-span-1">
-              <Input value={poId ? String(poId) : ""} disabled placeholder="-" />
             </Form.Item>
 
             {/* Vendor */}
@@ -777,8 +852,6 @@ export default function BillCreatePage() {
               <Select
                 showSearch
                 placeholder="เลือกผู้ขาย"
-                // If locked by PO, allows changing? Usually yes, but warns. 
-                // But typically Bill from PO implies same vendor. Let's keep enabled but defaulted.
                 optionFilterProp="label"
                 filterOption={(input, option) =>
                   String(option?.label ?? "")
@@ -789,6 +862,13 @@ export default function BillCreatePage() {
                   value: v.id,
                   label: `${v.code} - ${v.name}`,
                 }))}
+                onChange={(v) => {
+                  // User-driven vendor change → drop any picked PO (the PO belonged to the old vendor).
+                  // Programmatic changes (e.g. from PO loader) go through form.setFieldsValue, not this handler.
+                  if (!lockedPoId && pickedPoId && Number(v) !== vendorIdSelector) {
+                    setPickedPoId(null);
+                  }
+                }}
               />
             </Form.Item>
 
@@ -802,7 +882,9 @@ export default function BillCreatePage() {
               <Select
                 loading={loadingPeople}
                 disabled={!vendorIdSelector}
-                placeholder={vendorIdSelector ? "เลือกผู้ติดต่อหลัก" : "เลือก Vendor ก่อน"}
+                placeholder={
+                  vendorIdSelector ? "เลือกผู้ติดต่อหลัก" : "เลือก Vendor ก่อน"
+                }
                 optionFilterProp="label"
                 showSearch
                 options={vendorPeopleOptions}
@@ -817,7 +899,8 @@ export default function BillCreatePage() {
                     {[
                       vendorShipping.contact_name,
                       vendorShipping.address_line,
-                      vendorShipping.subdistrict && `ต.${vendorShipping.subdistrict}`,
+                      vendorShipping.subdistrict &&
+                        `ต.${vendorShipping.subdistrict}`,
                       vendorShipping.district && `อ.${vendorShipping.district}`,
                       vendorShipping.province && `จ.${vendorShipping.province}`,
                       vendorShipping.postcode,
@@ -837,9 +920,12 @@ export default function BillCreatePage() {
                     {[
                       vendorRegistered.contact_name,
                       vendorRegistered.address_line,
-                      vendorRegistered.subdistrict && `ต.${vendorRegistered.subdistrict}`,
-                      vendorRegistered.district && `อ.${vendorRegistered.district}`,
-                      vendorRegistered.province && `จ.${vendorRegistered.province}`,
+                      vendorRegistered.subdistrict &&
+                        `ต.${vendorRegistered.subdistrict}`,
+                      vendorRegistered.district &&
+                        `อ.${vendorRegistered.district}`,
+                      vendorRegistered.province &&
+                        `จ.${vendorRegistered.province}`,
                       vendorRegistered.postcode,
                     ]
                       .filter(Boolean)
@@ -848,6 +934,57 @@ export default function BillCreatePage() {
                 </Card>
               </div>
             )}
+
+            <Form.Item label="อ้างอิง PO" className="md:col-span-1">
+              {lockedPoId ? (
+                <Input
+                  value={poInfo?.po_no ?? `#${lockedPoId}`}
+                  disabled
+                  placeholder="-"
+                />
+              ) : (
+                <Select
+                  showSearch
+                  allowClear
+                  disabled={!vendorIdSelector}
+                  placeholder={
+                    vendorIdSelector
+                      ? "พิมพ์เลข PO เพื่อค้นหา"
+                      : "เลือก Vendor ก่อน"
+                  }
+                  filterOption={false}
+                  loading={poSearchLoading}
+                  options={poSearchOptions}
+                  value={pickedPoId ?? undefined}
+                  onSearch={(q) => searchPoOptions(q)}
+                  onFocus={() => {
+                    if (poSearchOptions.length === 0) searchPoOptions("");
+                  }}
+                  onChange={(v) => {
+                    const id = typeof v === "number" ? v : v ? Number(v) : null;
+                    setPickedPoId(id);
+                    if (!id) {
+                      setPoInfo(null);
+                      setLines([
+                        {
+                          key: safeUUID(),
+                          product_id: null,
+                          qty: 1,
+                          unit_cost: 0,
+                          discount_pct: 0,
+                          discount_amt: 0,
+                          tax_type: "EXCLUDE_VAT_7",
+                          manual_vat: null,
+                        },
+                      ]);
+                    }
+                  }}
+                  notFoundContent={
+                    poSearchLoading ? "กำลังค้นหา..." : "ไม่พบ PO ที่ใช้ได้"
+                  }
+                />
+              )}
+            </Form.Item>
 
             <Form.Item
               name="warehouse_id"
@@ -865,7 +1002,11 @@ export default function BillCreatePage() {
               />
             </Form.Item>
 
-            <Form.Item name="note" label="หมายเหตุ (ถ้ามี)" className="md:col-span-3">
+            <Form.Item
+              name="note"
+              label="หมายเหตุ (ถ้ามี)"
+              className="md:col-span-3"
+            >
               <Input.TextArea rows={1} />
             </Form.Item>
           </div>
@@ -1039,9 +1180,13 @@ export default function BillCreatePage() {
                       <div className="md:col-span-2">
                         <div className="text-xs text-gray-500 mb-1 flex items-center gap-1">
                           <span>VAT</span>
-                          {l.manual_vat !== undefined && l.manual_vat !== null && String(l.manual_vat) !== '' && (
-                            <span className="text-[10px] text-orange-500">*(แก้ไขเอง)*</span>
-                          )}
+                          {l.manual_vat !== undefined &&
+                            l.manual_vat !== null &&
+                            String(l.manual_vat) !== "" && (
+                              <span className="text-[10px] text-orange-500">
+                                *(แก้ไขเอง)*
+                              </span>
+                            )}
                         </div>
                         <InputNumber
                           min={0}
@@ -1050,7 +1195,13 @@ export default function BillCreatePage() {
                           parser={parseComma}
                           onKeyDown={preventNonNumericKey}
                           onPaste={preventNonNumericPaste}
-                          value={l.manual_vat !== undefined && l.manual_vat !== null && String(l.manual_vat) !== '' ? l.manual_vat : r.vat}
+                          value={
+                            l.manual_vat !== undefined &&
+                            l.manual_vat !== null &&
+                            String(l.manual_vat) !== ""
+                              ? l.manual_vat
+                              : r.vat
+                          }
                           onChange={(val) =>
                             setLine(l.key, { manual_vat: val })
                           }
@@ -1228,7 +1379,8 @@ export default function BillCreatePage() {
               </div>
 
               <div className="text-xs text-gray-500">
-                * ยอดรวมสุทธิ = (ยอดสุทธิสินค้า + VAT + ค่าใช้จ่ายเพิ่มเติม) − ส่วนลดท้ายบิล
+                * ยอดรวมสุทธิ = (ยอดสุทธิสินค้า + VAT + ค่าใช้จ่ายเพิ่มเติม) −
+                ส่วนลดท้ายบิล
               </div>
             </div>
           </Card>
