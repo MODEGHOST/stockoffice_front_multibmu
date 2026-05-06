@@ -168,7 +168,6 @@ export default function GrnDetailPage() {
 
   return (
     <div className="space-y-4">
-
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <Title level={3} className="!mb-1">
@@ -199,15 +198,27 @@ export default function GrnDetailPage() {
               Refresh
             </Button>
             <GrnPrint data={data!} />
-            <Button type="primary" onClick={onApprove} disabled={!canApprove || acting}>
+            <Button
+              type="primary"
+              onClick={onApprove}
+              disabled={!canApprove || acting}
+            >
               Approve
             </Button>
-            <Button danger onClick={() => setCancelOpen(true)} disabled={!canCancel || acting}>
+            <Button
+              danger
+              onClick={() => setCancelOpen(true)}
+              disabled={!canCancel || acting}
+            >
               Cancel
             </Button>
             {hasPreviousStep && (
-              <Button danger onClick={() => setCancelStepOpen(true)} disabled={!canCancel || acting}>
-                Cancel Step
+              <Button
+                danger
+                onClick={() => setCancelStepOpen(true)}
+                disabled={!canCancel || acting}
+              >
+                ย้อน 1 ขั้น (Cancel Step)
               </Button>
             )}
           </Space>
@@ -215,27 +226,43 @@ export default function GrnDetailPage() {
 
         <Descriptions className="mt-4" column={2} bordered size="small">
           <Descriptions.Item label="Issue date">
-            {header?.issue_date ? dayjs(header.issue_date).format("DD/MM/YYYY") : "-"}
+            {header?.issue_date
+              ? dayjs(header.issue_date).format("DD/MM/YYYY")
+              : "-"}
           </Descriptions.Item>
-          <Descriptions.Item label="Status">{header?.status || "-"}</Descriptions.Item>
+          <Descriptions.Item label="Status">
+            {header?.status || "-"}
+          </Descriptions.Item>
 
           <Descriptions.Item label="Vendor">{vendorText}</Descriptions.Item>
           <Descriptions.Item label="Warehouse">{whText}</Descriptions.Item>
-          <Descriptions.Item label="ผู้สร้างเอกสาร (Creator)">{header?.creator_name || "-"}</Descriptions.Item>
+          <Descriptions.Item label="ผู้สร้างเอกสาร (Creator)">
+            {header?.creator_name || "-"}
+          </Descriptions.Item>
 
           <Descriptions.Item label="PO Ref">
-              {header?.po_id ? (
-                  <a onClick={() => nav(`/purchase/po/${header.po_id}`)} className="text-blue-600 hover:underline cursor-pointer">
-                      #{header.po_id} (เปิด PO)
-                  </a>
-              ) : "-"}
+            {header?.po_id ? (
+              <a
+                onClick={() => nav(`/purchase/po/${header.po_id}`)}
+                className="text-blue-600 hover:underline cursor-pointer"
+              >
+                #{header.po_id} (เปิด PO)
+              </a>
+            ) : (
+              "-"
+            )}
           </Descriptions.Item>
           <Descriptions.Item label="Bill Ref">
-               {header?.bill_id ? (
-                  <a onClick={() => nav(`/purchase/bill/${header.bill_id}`)} className="text-blue-600 hover:underline cursor-pointer">
-                      #{header.bill_id} (เปิด Bill)
-                  </a>
-              ) : "-"}
+            {header?.bill_id ? (
+              <a
+                onClick={() => nav(`/purchase/bill/${header.bill_id}`)}
+                className="text-blue-600 hover:underline cursor-pointer"
+              >
+                #{header.bill_id} (เปิด Bill)
+              </a>
+            ) : (
+              "-"
+            )}
           </Descriptions.Item>
 
           <Descriptions.Item label="Note" span={2}>
@@ -250,125 +277,166 @@ export default function GrnDetailPage() {
 
       {/* Items + Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          <Card className="lg:col-span-9" title={`รายการสินค้า (${items.length})`}>
-             <div className="space-y-3">
-                {items.map((it: any, idx: number) => {
-                    const r = calcLine(it);
-                    return (
-                        <div key={idx} className="border rounded-lg p-3 bg-slate-50">
-                            <div className="flex justify-between items-start">
-                                 <div>
-                                    <div className="font-medium text-base">{it.name}</div>
-                                    <div className="text-sm text-gray-500">{it.code}</div>
-                                 </div>
-                                 <div className="text-right">
-                                    <div className="font-semibold">{Number(it.qty).toLocaleString()} หน่วย</div>
-                                 </div>
-                            </div>
-                            
-                            <Divider className="!my-2" />
-                            
-                             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-                                 <div>
-                                    <div className="text-gray-500 text-xs">ต้นทุน/หน่วย</div>
-                                    <div>{Number(it.unit_cost).toLocaleString()}</div>
-                                 </div>
-                                 <div>
-                                    <div className="text-gray-500 text-xs">ส่วนลด</div>
-                                    {r.discount > 0 ? <div className="text-red-500">-{r.discount.toLocaleString()}</div> : "-"}
-                                 </div>
-                                 <div>
-                                    <div className="text-gray-500 text-xs">ก่อนภาษี ({r.taxType})</div>
-                                    <div>{r.beforeTax.toLocaleString()}</div>
-                                 </div>
-                                 <div>
-                                    <div className="text-gray-500 text-xs flex items-center gap-1">
-                                        <span>VAT</span>
-                                        {it.manual_vat !== undefined && it.manual_vat !== null && String(it.manual_vat) !== '' && (
-                                            <span className="text-[10px] text-orange-500 leading-none">*(แก้ไขเอง)*</span>
-                                        )}
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <span>{r.vat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                    </div>
-                                 </div>
-                                 <div className="text-right">
-                                    <div className="text-gray-500 text-xs">รวม</div>
-                                    <div className="font-medium">{r.total.toLocaleString()}</div>
-                                 </div>
-                            </div>
-                        </div>
-                    );
-                })}
-                {!items.length && <div className="text-center text-gray-400 py-4">ไม่มีรายการสินค้า</div>}
-             </div>
-          </Card>
-
-          <Card className="lg:col-span-3" title="สรุปข้อมูล">
-                <div className="space-y-3">
-                    <div className="flex justify-between">
-                        <div className="text-gray-600">รวมจำนวน</div>
-                        <div className="font-medium">{totals.totalQty.toLocaleString()}</div>
-                    </div>
-                     <div className="flex justify-between">
-                        <div className="text-gray-600">มูลค่าก่อนส่วนลด</div>
-                        <div className="font-medium">{totals.base.toLocaleString()}</div>
-                    </div>
-                    <div className="flex justify-between">
-                        <div className="text-gray-600">ส่วนลดรวม</div>
-                        <div className="font-medium text-red-500">-{totals.discount.toLocaleString()}</div>
-                    </div>
-
-                    <Divider className="!my-2" />
-
-                    <div className="flex justify-between">
-                        <div className="text-gray-600">ยอดสุทธิสินค้า</div>
-                        <div className="font-medium">{totals.net.toLocaleString()}</div>
-                    </div>
-                    <div className="flex justify-between">
-                        <div className="text-gray-600">VAT</div>
-                        <div className="font-medium">{totals.vat.toLocaleString()}</div>
-                    </div>
-
-                    <Divider className="!my-2" />
-                    
-                    {totals.extra > 0 && (
-                        <div className="flex justify-between">
-                            <div className="text-gray-600">ค่าใช้จ่ายเพิ่มเติม</div>
-                            <div className="font-medium">{totals.extra.toLocaleString()}</div>
-                        </div>
-                    )}
-                    
-                    {/* Header Discount */}
-                    <Divider className="!my-2" />
+        <Card
+          className="lg:col-span-9"
+          title={`รายการสินค้า (${items.length})`}
+        >
+          <div className="space-y-3">
+            {items.map((it: any, idx: number) => {
+              const r = calcLine(it);
+              return (
+                <div key={idx} className="border rounded-lg p-3 bg-slate-50">
+                  <div className="flex justify-between items-start">
                     <div>
-                        <div className="text-sm font-medium mb-2">ส่วนลดท้ายบิล</div>
-                        <div className="flex justify-between">
-                            <div className="text-gray-600">
-                                {header?.header_discount_type === "PERCENT" ? "อัตรา (%)" : "จำนวน (บาท)"}
-                            </div>
-                            <div className="font-medium">
-                                {header?.header_discount_type === "PERCENT" 
-                                    ? `${Number(header?.header_discount_value || 0).toLocaleString()}%`
-                                    : Number(header?.header_discount_value || 0).toLocaleString()
-                                }
-                            </div>
-                        </div>
-                        <div className="flex justify-between mt-1">
-                            <div className="text-gray-600">คิดเป็น</div>
-                            <div className="font-medium text-red-500">-{totals.headerDiscount.toLocaleString()}</div>
-                        </div>
+                      <div className="font-medium text-base">{it.name}</div>
+                      <div className="text-sm text-gray-500">{it.code}</div>
                     </div>
+                    <div className="text-right">
+                      <div className="font-semibold">
+                        {Number(it.qty).toLocaleString()} หน่วย
+                      </div>
+                    </div>
+                  </div>
 
-                    <div className="flex justify-between">
-                        <div className="text-gray-600">ยอดรวมสุทธิ</div>
-                        <div className="text-lg font-semibold">{totals.grandTotal.toLocaleString()}</div>
+                  <Divider className="!my-2" />
+
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                    <div>
+                      <div className="text-gray-500 text-xs">ต้นทุน/หน่วย</div>
+                      <div>{Number(it.unit_cost).toLocaleString()}</div>
                     </div>
-                     <div className="text-xs text-gray-500 mt-2">
-                        * แสดงตามข้อมูลที่บันทึก (ถ้า Backend ยังไม่รองรับ อาจแสดงเป็น 0)
-                     </div>
+                    <div>
+                      <div className="text-gray-500 text-xs">ส่วนลด</div>
+                      {r.discount > 0 ? (
+                        <div className="text-red-500">
+                          -{r.discount.toLocaleString()}
+                        </div>
+                      ) : (
+                        "-"
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-gray-500 text-xs">
+                        ก่อนภาษี ({r.taxType})
+                      </div>
+                      <div>{r.beforeTax.toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500 text-xs flex items-center gap-1">
+                        <span>VAT</span>
+                        {it.manual_vat !== undefined &&
+                          it.manual_vat !== null &&
+                          String(it.manual_vat) !== "" && (
+                            <span className="text-[10px] text-orange-500 leading-none">
+                              *(แก้ไขเอง)*
+                            </span>
+                          )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span>
+                          {r.vat.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-gray-500 text-xs">รวม</div>
+                      <div className="font-medium">
+                        {r.total.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-          </Card>
+              );
+            })}
+            {!items.length && (
+              <div className="text-center text-gray-400 py-4">
+                ไม่มีรายการสินค้า
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <Card className="lg:col-span-3" title="สรุปข้อมูล">
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <div className="text-gray-600">รวมจำนวน</div>
+              <div className="font-medium">
+                {totals.totalQty.toLocaleString()}
+              </div>
+            </div>
+            <div className="flex justify-between">
+              <div className="text-gray-600">มูลค่าก่อนส่วนลด</div>
+              <div className="font-medium">{totals.base.toLocaleString()}</div>
+            </div>
+            <div className="flex justify-between">
+              <div className="text-gray-600">ส่วนลดรวม</div>
+              <div className="font-medium text-red-500">
+                -{totals.discount.toLocaleString()}
+              </div>
+            </div>
+
+            <Divider className="!my-2" />
+
+            <div className="flex justify-between">
+              <div className="text-gray-600">ยอดสุทธิสินค้า</div>
+              <div className="font-medium">{totals.net.toLocaleString()}</div>
+            </div>
+            <div className="flex justify-between">
+              <div className="text-gray-600">VAT</div>
+              <div className="font-medium">{totals.vat.toLocaleString()}</div>
+            </div>
+
+            <Divider className="!my-2" />
+
+            {totals.extra > 0 && (
+              <div className="flex justify-between">
+                <div className="text-gray-600">ค่าใช้จ่ายเพิ่มเติม</div>
+                <div className="font-medium">
+                  {totals.extra.toLocaleString()}
+                </div>
+              </div>
+            )}
+
+            {/* Header Discount */}
+            <Divider className="!my-2" />
+            <div>
+              <div className="text-sm font-medium mb-2">ส่วนลดท้ายบิล</div>
+              <div className="flex justify-between">
+                <div className="text-gray-600">
+                  {header?.header_discount_type === "PERCENT"
+                    ? "อัตรา (%)"
+                    : "จำนวน (บาท)"}
+                </div>
+                <div className="font-medium">
+                  {header?.header_discount_type === "PERCENT"
+                    ? `${Number(header?.header_discount_value || 0).toLocaleString()}%`
+                    : Number(
+                        header?.header_discount_value || 0,
+                      ).toLocaleString()}
+                </div>
+              </div>
+              <div className="flex justify-between mt-1">
+                <div className="text-gray-600">คิดเป็น</div>
+                <div className="font-medium text-red-500">
+                  -{totals.headerDiscount.toLocaleString()}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-between">
+              <div className="text-gray-600">ยอดรวมสุทธิ</div>
+              <div className="text-lg font-semibold">
+                {totals.grandTotal.toLocaleString()}
+              </div>
+            </div>
+            <div className="text-xs text-gray-500 mt-2">
+              * แสดงตามข้อมูลที่บันทึก (ถ้า Backend ยังไม่รองรับ อาจแสดงเป็น 0)
+            </div>
+          </div>
+        </Card>
       </div>
 
       <Modal

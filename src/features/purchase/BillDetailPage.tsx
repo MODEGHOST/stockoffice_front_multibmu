@@ -194,7 +194,6 @@ export default function BillDetailPage() {
 
   return (
     <div className="space-y-4">
-
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <Title level={3} className="!mb-1">
@@ -216,7 +215,9 @@ export default function BillDetailPage() {
       <Card loading={loading}>
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2">
-            <div className="text-lg font-semibold">{header?.bill_no || "-"}</div>
+            <div className="text-lg font-semibold">
+              {header?.bill_no || "-"}
+            </div>
             {statusTag(header?.status)}
           </div>
 
@@ -246,7 +247,7 @@ export default function BillDetailPage() {
                 onClick={() => setCancelStepOpen(true)}
                 disabled={!canCancel || acting}
               >
-                Cancel Step
+                ย้อน 1 ขั้น (Cancel Step)
               </Button>
             )}
 
@@ -267,7 +268,7 @@ export default function BillDetailPage() {
           <Descriptions.Item label="Issue date">
             {safeDate(header?.issue_date)}
           </Descriptions.Item>
-          
+
           <Descriptions.Item label="Paid date">
             {header?.paid_date ? (
               <Tag color="green">{safeDate(header?.paid_date)}</Tag>
@@ -277,13 +278,18 @@ export default function BillDetailPage() {
           </Descriptions.Item>
 
           <Descriptions.Item label="PO Ref">
-             {header?.po_id ? (
-                 <a onClick={() => nav(`/purchase/po/${header.po_id}`)} className="text-blue-600 hover:underline cursor-pointer">
-                     #{header.po_id} (เปิด PO)
-                 </a>
-             ) : "-"}
+            {header?.po_id ? (
+              <a
+                onClick={() => nav(`/purchase/po/${header.po_id}`)}
+                className="text-blue-600 hover:underline cursor-pointer"
+              >
+                #{header.po_id} (เปิด PO)
+              </a>
+            ) : (
+              "-"
+            )}
           </Descriptions.Item>
-          
+
           <Descriptions.Item label="Vendor">
             {header?.vendor_name ?? header?.vendor_id ?? "-"}
           </Descriptions.Item>
@@ -296,9 +302,9 @@ export default function BillDetailPage() {
           </Descriptions.Item>
 
           <Descriptions.Item label="ผู้ติดต่อหลัก">
-             {header?.vendor_person_first_name 
-               ? `${header.vendor_person_first_name} ${header.vendor_person_last_name || ""} ${header.vendor_person_phone ? `(${header.vendor_person_phone})` : ""}` 
-               : "-"}
+            {header?.vendor_person_first_name
+              ? `${header.vendor_person_first_name} ${header.vendor_person_last_name || ""} ${header.vendor_person_phone ? `(${header.vendor_person_phone})` : ""}`
+              : "-"}
           </Descriptions.Item>
 
           <Descriptions.Item label="Note" span={2}>
@@ -403,18 +409,27 @@ export default function BillDetailPage() {
                     </div>
 
                     <div className="md:col-span-2">
-                       <div className="text-xs text-gray-500 mb-1">ก่อนภาษี</div>
-                       <Input value={r.beforeTax.toLocaleString()} disabled />
+                      <div className="text-xs text-gray-500 mb-1">ก่อนภาษี</div>
+                      <Input value={r.beforeTax.toLocaleString()} disabled />
                     </div>
 
                     <div className="md:col-span-2">
-                       <div className="text-xs text-gray-500 mb-1">VAT</div>
-                       <div className="flex items-center gap-1 border border-[#d9d9d9] bg-[#f5f5f5] rounded py-[4px] px-[11px] h-[32px]">
-                          {it.manual_vat !== undefined && it.manual_vat !== null && String(it.manual_vat) !== '' && (
-                             <span className="text-[10px] text-orange-500 leading-none">*(แก้ไขเอง)*</span>
+                      <div className="text-xs text-gray-500 mb-1">VAT</div>
+                      <div className="flex items-center gap-1 border border-[#d9d9d9] bg-[#f5f5f5] rounded py-[4px] px-[11px] h-[32px]">
+                        {it.manual_vat !== undefined &&
+                          it.manual_vat !== null &&
+                          String(it.manual_vat) !== "" && (
+                            <span className="text-[10px] text-orange-500 leading-none">
+                              *(แก้ไขเอง)*
+                            </span>
                           )}
-                          <span className="text-sm">{Number(r.vat).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                       </div>
+                        <span className="text-sm">
+                          {Number(r.vat).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="md:col-span-2">
